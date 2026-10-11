@@ -5,8 +5,8 @@
 # DO NOT RUN THIS SCRIPT ON YOUR PC OR MAC! THIS IS ONLY MEANT TO BE RUN
 # IN A CONTAINER!
 #
-# This file is part of ToolUplink image, available at:
-# https://github.com/hwdsl2/tooluplink
+# This file is part of UplinkCrate image, available at:
+# https://github.com/hwdsl2/uplinkcrate
 #
 # Copyright (C) 2026 Lin Song <linsongui@gmail.com>
 #
@@ -227,7 +227,7 @@ else
 fi
 
 echo
-echo "ToolUplink - https://github.com/hwdsl2/tooluplink"
+echo "UplinkCrate - https://github.com/hwdsl2/uplinkcrate"
 
 if ! grep -q " /var/lib/mcp " /proc/mounts 2>/dev/null; then
   echo
@@ -242,7 +242,7 @@ first_run=false
 
 if $first_run; then
   echo
-  echo "Starting ToolUplink first-run setup..."
+  echo "Starting UplinkCrate first-run setup..."
   echo "Port: $MCP_PORT"
   echo
 fi
@@ -305,7 +305,7 @@ fi
 # Graceful shutdown handler
 cleanup() {
   echo
-  echo "Stopping ToolUplink..."
+  echo "Stopping UplinkCrate..."
   kill "${CADDY_PID:-}" 2>/dev/null
   kill "${MCPHUB_PID:-}" 2>/dev/null
   wait "${CADDY_PID:-}" 2>/dev/null
@@ -394,7 +394,7 @@ fi
 # Display connection info
 echo
 echo "==========================================================="
-echo "ToolUplink API key"
+echo "UplinkCrate API key"
 echo "==========================================================="
 echo "${api_key}"
 echo "==========================================================="
@@ -407,7 +407,7 @@ echo "  Specific server:  http://${server_addr}:${MCP_PORT}/mcp/<server-name>"
 echo "  Dashboard:        http://${server_addr}:${MCP_PORT}/"
 echo
 echo "To set up HTTPS, see: Using a reverse proxy"
-echo "  https://github.com/hwdsl2/tooluplink#using-a-reverse-proxy"
+echo "  https://github.com/hwdsl2/uplinkcrate#using-a-reverse-proxy"
 echo
 echo "Test with:"
 echo "  curl http://${server_addr}:${MCP_PORT}/mcp \\"

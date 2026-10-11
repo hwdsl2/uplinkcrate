@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# https://github.com/hwdsl2/tooluplink
+# https://github.com/hwdsl2/uplinkcrate
 #
 # Copyright (C) 2026 Lin Song <linsongui@gmail.com>
 #
@@ -23,8 +23,8 @@ show_usage() {
   fi
   cat 1>&2 <<'EOF'
 
-ToolUplink - Server Management
-https://github.com/hwdsl2/tooluplink
+UplinkCrate - Server Management
+https://github.com/hwdsl2/uplinkcrate
 
 Usage: docker exec <container> mcp_manage [options]
 
@@ -255,7 +255,7 @@ do_show_key() {
     return
   fi
   echo "==========================================================="
-  echo "ToolUplink API key"
+  echo "UplinkCrate API key"
   echo "==========================================================="
   echo "${MCP_API_KEY}"
   echo "==========================================================="
