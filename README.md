@@ -1,12 +1,12 @@
 [English](README.md) | [简体中文](README-zh.md) | [繁體中文](README-zh-Hant.md) | [Русский](README-ru.md)
 
-# ToolUplink
+# UplinkCrate
 
 **Open-source, self-hosted MCP gateway.**
 
-[![Build Status](https://github.com/hwdsl2/tooluplink/actions/workflows/main.yml/badge.svg)](https://github.com/hwdsl2/tooluplink/actions/workflows/main.yml) &nbsp;[![Docker Pulls](https://raw.githubusercontent.com/hwdsl2/badges/main/img/docker-pulls-mcp-gateway.svg)](https://hub.docker.com/r/hwdsl2/mcp-gateway) &nbsp;[![License: MIT](docs/images/license.svg)](https://opensource.org/licenses/MIT)
+[![Build Status](https://github.com/hwdsl2/uplinkcrate/actions/workflows/main.yml/badge.svg)](https://github.com/hwdsl2/uplinkcrate/actions/workflows/main.yml) &nbsp;[![Docker Pulls](https://raw.githubusercontent.com/hwdsl2/badges/main/img/docker-pulls-mcp-gateway.svg)](https://hub.docker.com/r/hwdsl2/mcp-gateway) &nbsp;[![License: MIT](docs/images/license.svg)](https://opensource.org/licenses/MIT)
 
-Give AI clients authenticated access to multiple [MCP](https://modelcontextprotocol.io/) tool servers through ToolUplink. Powered by [MCPHub](https://github.com/samanhappy/mcphub) and a Caddy authentication proxy, it provides Streamable HTTP and SSE access, server routing, and a dashboard for your self-hosted tool gateway.
+Give AI clients authenticated access to multiple [MCP](https://modelcontextprotocol.io/) tool servers through UplinkCrate. Powered by [MCPHub](https://github.com/samanhappy/mcphub) and a Caddy authentication proxy, it provides Streamable HTTP and SSE access, server routing, and a dashboard for your self-hosted tool gateway.
 
 > Previously known as `docker-mcp-gateway`, maintained by [hwdsl2](https://github.com/hwdsl2). The Docker image remains `hwdsl2/mcp-gateway`.
 
@@ -20,7 +20,7 @@ Give AI clients authenticated access to multiple [MCP](https://modelcontextproto
 - **Dashboard:** web UI at `/` for monitoring MCP server status.
 - **Env-file configuration:** simple `mcp.env` file; no JSON editing.
 - **LiteLLM integration:** connect LiteLLM, including [GatewayCrate](https://github.com/hwdsl2/gatewaycrate), to give compatible LLMs access to MCP tools.
-- **Automated builds:** images are automatically built and published through [GitHub Actions](https://github.com/hwdsl2/tooluplink/actions).
+- **Automated builds:** images are automatically built and published through [GitHub Actions](https://github.com/hwdsl2/uplinkcrate/actions).
 
 Also available as part of the [Self-Hosted AI Stack](https://github.com/hwdsl2/self-hosted-ai-stack), which deploys a complete self-hosted AI stack with a single command.
 
@@ -32,7 +32,7 @@ Also available as part of the [Self-Hosted AI Stack](https://github.com/hwdsl2/s
 
 ## Quick start
 
-**Step 1.** Start ToolUplink:
+**Step 1.** Start UplinkCrate:
 
 ```bash
 docker run \
@@ -58,7 +58,7 @@ docker logs mcp
 uplink_api_key="$(docker exec mcp mcp_manage --getkey)"
 ```
 
-The API key is displayed in a box labeled **ToolUplink API key**. To display it again at any time:
+The API key is displayed in a box labeled **UplinkCrate API key**. To display it again at any time:
 
 ```bash
 docker exec mcp mcp_manage --showkey
@@ -375,11 +375,11 @@ volumes:
 
 ## Using a reverse proxy
 
-For internet-facing deployments, place a reverse proxy in front of ToolUplink to handle HTTPS termination. The server works without HTTPS on a local or trusted network, but HTTPS is recommended when the API endpoint is exposed to the internet.
+For internet-facing deployments, place a reverse proxy in front of UplinkCrate to handle HTTPS termination. The server works without HTTPS on a local or trusted network, but HTTPS is recommended when the API endpoint is exposed to the internet.
 
-Use one of the following addresses to reach the ToolUplink container from your reverse proxy:
+Use one of the following addresses to reach the UplinkCrate container from your reverse proxy:
 
-- **`mcp:3000`** — if your reverse proxy runs as a container in the **same Docker network** as ToolUplink (e.g. defined in the same `docker-compose.yml`).
+- **`mcp:3000`** — if your reverse proxy runs as a container in the **same Docker network** as UplinkCrate (e.g. defined in the same `docker-compose.yml`).
 - **`127.0.0.1:3000`** — if your reverse proxy runs **on the host** and port `3000` is published (the default `docker-compose.yml` publishes it).
 
 **Note:** The `Authorization: Bearer` header passes through reverse proxies automatically — no special configuration needed.
@@ -445,13 +445,13 @@ Your configuration and API key are preserved in the `mcp-data` volume.
 
 ## Using with other AI services
 
-ToolUplink can be used as the MCP tool gateway in a broader self-hosted AI setup.
+UplinkCrate can be used as the MCP tool gateway in a broader self-hosted AI setup.
 
-For full and lightweight Docker Compose stacks, manual `docker run` examples, and voice/RAG/MCP pipeline examples with SpeakCrate, EmbedCrate, GatewayCrate, InferCrate, ParseCrate, and ToolUplink, see [Self-Hosted AI Stack](https://github.com/hwdsl2/self-hosted-ai-stack).
+For full and lightweight Docker Compose stacks, manual `docker run` examples, and voice/RAG/MCP pipeline examples with SpeakCrate, EmbedCrate, GatewayCrate, InferCrate, ParseCrate, and UplinkCrate, see [Self-Hosted AI Stack](https://github.com/hwdsl2/self-hosted-ai-stack).
 
-**Connect ToolUplink to GatewayCrate:**
+**Connect UplinkCrate to GatewayCrate:**
 
-For GatewayCrate or another compatible LiteLLM deployment, add ToolUplink as an MCP tool source:
+For GatewayCrate or another compatible LiteLLM deployment, add UplinkCrate as an MCP tool source:
 
 ```yaml
 # In your LiteLLM config, add the MCP gateway as a tool source:

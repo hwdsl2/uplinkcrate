@@ -1,12 +1,12 @@
 [English](README.md) | [简体中文](README-zh.md) | [繁體中文](README-zh-Hant.md) | [Русский](README-ru.md)
 
-# ToolUplink
+# UplinkCrate
 
 **MCP-шлюз с открытым исходным кодом для самостоятельного размещения.**
 
-[![Статус сборки](https://github.com/hwdsl2/tooluplink/actions/workflows/main.yml/badge.svg)](https://github.com/hwdsl2/tooluplink/actions/workflows/main.yml) &nbsp;[![Docker Pulls](https://raw.githubusercontent.com/hwdsl2/badges/main/img/docker-pulls-mcp-gateway.svg)](https://hub.docker.com/r/hwdsl2/mcp-gateway) &nbsp;[![Лицензия: MIT](docs/images/license.svg)](https://opensource.org/licenses/MIT)
+[![Статус сборки](https://github.com/hwdsl2/uplinkcrate/actions/workflows/main.yml/badge.svg)](https://github.com/hwdsl2/uplinkcrate/actions/workflows/main.yml) &nbsp;[![Docker Pulls](https://raw.githubusercontent.com/hwdsl2/badges/main/img/docker-pulls-mcp-gateway.svg)](https://hub.docker.com/r/hwdsl2/mcp-gateway) &nbsp;[![Лицензия: MIT](docs/images/license.svg)](https://opensource.org/licenses/MIT)
 
-Предоставьте AI-клиентам аутентифицированный доступ к нескольким серверам инструментов [MCP](https://modelcontextprotocol.io/) через ToolUplink. Шлюз работает на базе [MCPHub](https://github.com/samanhappy/mcphub) и прокси аутентификации Caddy и поддерживает Streamable HTTP и SSE, маршрутизацию серверов и панель управления вашим самостоятельно размещённым шлюзом инструментов.
+Предоставьте AI-клиентам аутентифицированный доступ к нескольким серверам инструментов [MCP](https://modelcontextprotocol.io/) через UplinkCrate. Шлюз работает на базе [MCPHub](https://github.com/samanhappy/mcphub) и прокси аутентификации Caddy и поддерживает Streamable HTTP и SSE, маршрутизацию серверов и панель управления вашим самостоятельно размещённым шлюзом инструментов.
 
 > Ранее проект назывался `docker-mcp-gateway`. Его поддерживает [hwdsl2](https://github.com/hwdsl2). Docker-образ остаётся `hwdsl2/mcp-gateway`.
 
@@ -20,7 +20,7 @@
 - **Панель управления:** веб-интерфейс на `/` для мониторинга состояния MCP-серверов
 - **Настройка через env-файл:** простой файл `mcp.env`; без редактирования JSON
 - **Интеграция с LiteLLM:** подключите LiteLLM, включая [GatewayCrate](https://github.com/hwdsl2/gatewaycrate), чтобы предоставить совместимым LLM доступ к инструментам MCP.
-- **Автоматическая сборка:** образы автоматически собираются и публикуются через [GitHub Actions](https://github.com/hwdsl2/tooluplink/actions).
+- **Автоматическая сборка:** образы автоматически собираются и публикуются через [GitHub Actions](https://github.com/hwdsl2/uplinkcrate/actions).
 
 Также доступен в составе [Self-Hosted AI Stack](https://github.com/hwdsl2/self-hosted-ai-stack/blob/main/README-ru.md), который развёртывает полный AI-стек на собственном сервере одной командой.
 
@@ -32,7 +32,7 @@
 
 ## Быстрый старт
 
-**Шаг 1.** Запустите ToolUplink:
+**Шаг 1.** Запустите UplinkCrate:
 
 ```bash
 docker run \
@@ -58,7 +58,7 @@ docker logs mcp
 uplink_api_key="$(docker exec mcp mcp_manage --getkey)"
 ```
 
-API-ключ отображается в рамке с надписью **ToolUplink API key**. Чтобы отобразить его снова в любое время:
+API-ключ отображается в рамке с надписью **UplinkCrate API key**. Чтобы отобразить его снова в любое время:
 
 ```bash
 docker exec mcp mcp_manage --showkey
@@ -375,11 +375,11 @@ volumes:
 
 ## Использование обратного прокси
 
-Для развёртывания с выходом в интернет разместите обратный прокси перед ToolUplink для обработки HTTPS-терминации. Сервер работает без HTTPS в локальной или доверенной сети, но HTTPS рекомендуется при открытом доступе к API-эндпоинту из интернета.
+Для развёртывания с выходом в интернет разместите обратный прокси перед UplinkCrate для обработки HTTPS-терминации. Сервер работает без HTTPS в локальной или доверенной сети, но HTTPS рекомендуется при открытом доступе к API-эндпоинту из интернета.
 
-Используйте один из следующих адресов для доступа к контейнеру ToolUplink из обратного прокси:
+Используйте один из следующих адресов для доступа к контейнеру UplinkCrate из обратного прокси:
 
-- **`mcp:3000`** — если ваш обратный прокси работает как контейнер в **той же Docker-сети**, что и ToolUplink (например, определён в том же `docker-compose.yml`).
+- **`mcp:3000`** — если ваш обратный прокси работает как контейнер в **той же Docker-сети**, что и UplinkCrate (например, определён в том же `docker-compose.yml`).
 - **`127.0.0.1:3000`** — если ваш обратный прокси работает **на хосте** и порт `3000` опубликован (по умолчанию `docker-compose.yml` публикует его).
 
 **Примечание:** Заголовок `Authorization: Bearer` автоматически передаётся через обратные прокси — специальная настройка не требуется.
@@ -445,13 +445,13 @@ docker rm -f mcp
 
 ## Использование с другими AI-сервисами
 
-ToolUplink можно использовать как MCP-шлюз для инструментов в более широком self-hosted AI-стеке.
+UplinkCrate можно использовать как MCP-шлюз для инструментов в более широком self-hosted AI-стеке.
 
-Готовые полные и облегчённые стеки Docker Compose, примеры ручного запуска через `docker run`, а также примеры голосовых, RAG- и MCP-конвейеров с SpeakCrate, EmbedCrate, GatewayCrate, InferCrate, ParseCrate и ToolUplink см. в [Self-Hosted AI Stack](https://github.com/hwdsl2/self-hosted-ai-stack/blob/main/README-ru.md).
+Готовые полные и облегчённые стеки Docker Compose, примеры ручного запуска через `docker run`, а также примеры голосовых, RAG- и MCP-конвейеров с SpeakCrate, EmbedCrate, GatewayCrate, InferCrate, ParseCrate и UplinkCrate см. в [Self-Hosted AI Stack](https://github.com/hwdsl2/self-hosted-ai-stack/blob/main/README-ru.md).
 
-**Подключите ToolUplink к GatewayCrate:**
+**Подключите UplinkCrate к GatewayCrate:**
 
-Для GatewayCrate или другого совместимого развёртывания LiteLLM добавьте ToolUplink как источник MCP-инструментов:
+Для GatewayCrate или другого совместимого развёртывания LiteLLM добавьте UplinkCrate как источник MCP-инструментов:
 
 ```yaml
 # В конфигурации LiteLLM добавьте MCP-шлюз как источник инструментов:

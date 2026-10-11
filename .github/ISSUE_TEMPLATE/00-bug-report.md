@@ -8,9 +8,9 @@ assignees: ''
 ---
 **Checklist**
 
-- [ ] I read the [README](https://github.com/hwdsl2/tooluplink/blob/main/README.md) or the relevant section
-- [ ] I searched existing [Issues](https://github.com/hwdsl2/tooluplink/issues?q=is%3Aissue)
-- [ ] This issue is about the ToolUplink Docker image/config/API, not only MCPHub itself
+- [ ] I read the [README](https://github.com/hwdsl2/uplinkcrate/blob/main/README.md) or the relevant section
+- [ ] I searched existing [Issues](https://github.com/hwdsl2/uplinkcrate/issues?q=is%3Aissue)
+- [ ] This issue is about the UplinkCrate Docker image/config/API, not only MCPHub itself
 
 <!---
 If you found a reproducible bug in the upstream project itself, consider opening an issue upstream: [MCPHub](https://github.com/samanhappy/mcphub).

@@ -1,12 +1,12 @@
 [English](README.md) | [简体中文](README-zh.md) | [繁體中文](README-zh-Hant.md) | [Русский](README-ru.md)
 
-# ToolUplink
+# UplinkCrate
 
 **開源、自託管的 MCP 閘道。**
 
-[![建置狀態](https://github.com/hwdsl2/tooluplink/actions/workflows/main.yml/badge.svg)](https://github.com/hwdsl2/tooluplink/actions/workflows/main.yml) &nbsp;[![Docker Pulls](https://raw.githubusercontent.com/hwdsl2/badges/main/img/docker-pulls-mcp-gateway.svg)](https://hub.docker.com/r/hwdsl2/mcp-gateway) &nbsp;[![授權條款: MIT](docs/images/license.svg)](https://opensource.org/licenses/MIT)
+[![建置狀態](https://github.com/hwdsl2/uplinkcrate/actions/workflows/main.yml/badge.svg)](https://github.com/hwdsl2/uplinkcrate/actions/workflows/main.yml) &nbsp;[![Docker Pulls](https://raw.githubusercontent.com/hwdsl2/badges/main/img/docker-pulls-mcp-gateway.svg)](https://hub.docker.com/r/hwdsl2/mcp-gateway) &nbsp;[![授權條款: MIT](docs/images/license.svg)](https://opensource.org/licenses/MIT)
 
-透過 ToolUplink，為 AI 用戶端提供經過驗證的多個 [MCP](https://modelcontextprotocol.io/) 工具伺服器存取。基於 [MCPHub](https://github.com/samanhappy/mcphub) 和 Caddy 驗證代理，提供 Streamable HTTP 和 SSE 存取、伺服器路由，以及自託管工具閘道的儀表板。
+透過 UplinkCrate，為 AI 用戶端提供經過驗證的多個 [MCP](https://modelcontextprotocol.io/) 工具伺服器存取。基於 [MCPHub](https://github.com/samanhappy/mcphub) 和 Caddy 驗證代理，提供 Streamable HTTP 和 SSE 存取、伺服器路由，以及自託管工具閘道的儀表板。
 
 > 本專案原名為 `docker-mcp-gateway`，由 [hwdsl2](https://github.com/hwdsl2) 維護。Docker 映像仍為 `hwdsl2/mcp-gateway`。
 
@@ -20,7 +20,7 @@
 - **儀表板：** 位於 `/` 的 Web UI，用於監控 MCP 伺服器狀態
 - **環境檔案設定：** 簡單的 `mcp.env` 檔案；無需編輯 JSON
 - **LiteLLM 整合：** 與 LiteLLM（包括 [GatewayCrate](https://github.com/hwdsl2/gatewaycrate)）配合，為相容的 LLM 提供 MCP 工具存取。
-- **自動建置：** 透過 [GitHub Actions](https://github.com/hwdsl2/tooluplink/actions) 自動建置和發布
+- **自動建置：** 透過 [GitHub Actions](https://github.com/hwdsl2/uplinkcrate/actions) 自動建置和發布
 
 也可作為 [Self-Hosted AI Stack](https://github.com/hwdsl2/self-hosted-ai-stack/blob/main/README-zh-Hant.md) 的一部分使用，一條命令即可部署完整的自託管 AI 技術堆疊。
 
@@ -32,7 +32,7 @@
 
 ## 快速開始
 
-**第一步。** 啟動 ToolUplink：
+**第一步。** 啟動 UplinkCrate：
 
 ```bash
 docker run \
@@ -58,7 +58,7 @@ docker logs mcp
 uplink_api_key="$(docker exec mcp mcp_manage --getkey)"
 ```
 
-API 金鑰顯示在標有 **ToolUplink API key** 的方框中。隨時可以透過以下指令重新顯示：
+API 金鑰顯示在標有 **UplinkCrate API key** 的方框中。隨時可以透過以下指令重新顯示：
 
 ```bash
 docker exec mcp mcp_manage --showkey
@@ -375,11 +375,11 @@ volumes:
 
 ## 使用反向代理
 
-如需面向公網部署，可在 ToolUplink 前置反向代理處理 HTTPS 終止。在本地或可信網路中使用無需 HTTPS，但將 API 端點暴露在公網時建議啟用 HTTPS。
+如需面向公網部署，可在 UplinkCrate 前置反向代理處理 HTTPS 終止。在本地或可信網路中使用無需 HTTPS，但將 API 端點暴露在公網時建議啟用 HTTPS。
 
-從反向代理存取 ToolUplink 容器時使用以下位址之一：
+從反向代理存取 UplinkCrate 容器時使用以下位址之一：
 
-- **`mcp:3000`** — 如果反向代理作為容器執行在與 ToolUplink **同一 Docker 網路**中（例如定義在同一 `docker-compose.yml` 中）。
+- **`mcp:3000`** — 如果反向代理作為容器執行在與 UplinkCrate **同一 Docker 網路**中（例如定義在同一 `docker-compose.yml` 中）。
 - **`127.0.0.1:3000`** — 如果反向代理執行在**主機上**且連接埠 `3000` 已發布（預設 `docker-compose.yml` 會發布該連接埠）。
 
 **注意：** `Authorization: Bearer` 標頭會自動通過反向代理傳遞，無需特殊設定。
@@ -445,13 +445,13 @@ docker rm -f mcp
 
 ## 與其他 AI 服務搭配使用
 
-ToolUplink 可作為更廣泛的自託管 AI 設定中的 MCP 工具閘道。
+UplinkCrate 可作為更廣泛的自託管 AI 設定中的 MCP 工具閘道。
 
-如需完整和輕量級 Docker Compose 技術堆疊、手動 `docker run` 範例，以及結合 SpeakCrate、EmbedCrate、GatewayCrate、InferCrate、ParseCrate 和 ToolUplink 的語音/RAG/MCP 流水線範例，請參閱 [Self-Hosted AI Stack](https://github.com/hwdsl2/self-hosted-ai-stack/blob/main/README-zh-Hant.md)。
+如需完整和輕量級 Docker Compose 技術堆疊、手動 `docker run` 範例，以及結合 SpeakCrate、EmbedCrate、GatewayCrate、InferCrate、ParseCrate 和 UplinkCrate 的語音/RAG/MCP 流水線範例，請參閱 [Self-Hosted AI Stack](https://github.com/hwdsl2/self-hosted-ai-stack/blob/main/README-zh-Hant.md)。
 
-**將 ToolUplink 連接到 GatewayCrate：**
+**將 UplinkCrate 連接到 GatewayCrate：**
 
-對於 GatewayCrate 或其他相容的 LiteLLM 部署，請將 ToolUplink 新增為 MCP 工具來源：
+對於 GatewayCrate 或其他相容的 LiteLLM 部署，請將 UplinkCrate 新增為 MCP 工具來源：
 
 ```yaml
 # 在 LiteLLM 設定中，將 MCP 閘道新增為工具來源：

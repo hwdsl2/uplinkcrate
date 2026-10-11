@@ -8,9 +8,9 @@ assignees: ''
 ---
 **Checklist**
 
-- [ ] I searched existing [Issues](https://github.com/hwdsl2/tooluplink/issues?q=is%3Aissue), and did not find a similar enhancement request
-- [ ] I read the [README](https://github.com/hwdsl2/tooluplink/blob/main/README.md) or the relevant section
-- [ ] This request is about the ToolUplink Docker image/config/API, not only MCPHub itself
+- [ ] I searched existing [Issues](https://github.com/hwdsl2/uplinkcrate/issues?q=is%3Aissue), and did not find a similar enhancement request
+- [ ] I read the [README](https://github.com/hwdsl2/uplinkcrate/blob/main/README.md) or the relevant section
+- [ ] This request is about the UplinkCrate Docker image/config/API, not only MCPHub itself
 
 **Describe the enhancement request**
 A clear and concise description of your enhancement request.
