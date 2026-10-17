@@ -1,10 +1,10 @@
-[English](README.md) | [简体中文](README-zh.md) | [繁體中文](README-zh-Hant.md) | [Русский](README-ru.md)
+[English](../README.md) | [简体中文](README-zh.md) | [繁體中文](README-zh-Hant.md) | [Русский](README-ru.md)
 
 # UplinkCrate
 
 **開源、自託管的 MCP 閘道。**
 
-[![建置狀態](https://github.com/hwdsl2/uplinkcrate/actions/workflows/main.yml/badge.svg)](https://github.com/hwdsl2/uplinkcrate/actions/workflows/main.yml) &nbsp;[![Docker Pulls](https://raw.githubusercontent.com/hwdsl2/badges/main/img/docker-pulls-mcp-gateway.svg)](https://hub.docker.com/r/hwdsl2/mcp-gateway) &nbsp;[![授權條款: MIT](docs/images/license.svg)](https://opensource.org/licenses/MIT)
+[![建置狀態](https://github.com/hwdsl2/uplinkcrate/actions/workflows/main.yml/badge.svg)](https://github.com/hwdsl2/uplinkcrate/actions/workflows/main.yml) &nbsp;[![Docker Pulls](https://raw.githubusercontent.com/hwdsl2/badges/main/img/docker-pulls-mcp-gateway.svg)](https://hub.docker.com/r/hwdsl2/mcp-gateway) &nbsp;[![授權條款: MIT](images/license.svg)](https://opensource.org/licenses/MIT)
 
 透過 UplinkCrate，為 AI 用戶端提供經過驗證的多個 [MCP](https://modelcontextprotocol.io/) 工具伺服器存取。基於 [MCPHub](https://github.com/samanhappy/mcphub) 和 Caddy 驗證代理，提供 Streamable HTTP 和 SSE 存取、伺服器路由，以及自託管工具閘道的儀表板。
 
@@ -22,13 +22,13 @@
 - **LiteLLM 整合：** 與 LiteLLM（包括 [GatewayCrate](https://github.com/hwdsl2/gatewaycrate)）配合，為相容的 LLM 提供 MCP 工具存取。
 - **自動建置：** 透過 [GitHub Actions](https://github.com/hwdsl2/uplinkcrate/actions) 自動建置和發布
 
-也可作為 [Self-Hosted AI Stack](https://github.com/hwdsl2/self-hosted-ai-stack/blob/main/README-zh-Hant.md) 的一部分使用，一條命令即可部署完整的自託管 AI 技術堆疊。
+也可作為 [Self-Hosted AI Stack](https://github.com/hwdsl2/self-hosted-ai-stack/blob/main/docs/README-zh-Hant.md) 的一部分使用，一條命令即可部署完整的自託管 AI 技術堆疊。
 
 > 📘 [The Self-Hosted AI Builder’s Guide](https://books2read.com/aiguide?store=amazon) 是一本關於建置、保護和維運自己的私有 AI 技術堆疊的實用指南。
 
 **另提供：**
 
-- 相關 AI 服務：[ScribeCrate](https://github.com/hwdsl2/scribecrate/blob/main/README-zh-Hant.md)、[SpeakCrate](https://github.com/hwdsl2/speakcrate/blob/main/README-zh-Hant.md)、[EmbedCrate](https://github.com/hwdsl2/embedcrate/blob/main/README-zh-Hant.md)、[GatewayCrate](https://github.com/hwdsl2/gatewaycrate/blob/main/README-zh-Hant.md)、[InferCrate](https://github.com/hwdsl2/infercrate/blob/main/README-zh-Hant.md)、[ParseCrate](https://github.com/hwdsl2/parsecrate/blob/main/README-zh-Hant.md)
+- 相關 AI 服務：[ScribeCrate](https://github.com/hwdsl2/scribecrate/blob/main/docs/README-zh-Hant.md)、[SpeakCrate](https://github.com/hwdsl2/speakcrate/blob/main/docs/README-zh-Hant.md)、[EmbedCrate](https://github.com/hwdsl2/embedcrate/blob/main/docs/README-zh-Hant.md)、[GatewayCrate](https://github.com/hwdsl2/gatewaycrate/blob/main/docs/README-zh-Hant.md)、[InferCrate](https://github.com/hwdsl2/infercrate/blob/main/docs/README-zh-Hant.md)、[ParseCrate](https://github.com/hwdsl2/parsecrate/blob/main/docs/README-zh-Hant.md)
 
 ## 快速開始
 
@@ -92,9 +92,9 @@ curl http://localhost:3000/health
 
 - [Setup IPsec VPN](https://github.com/hwdsl2/setup-ipsec-vpn/blob/master/README-zh-Hant.md)
 - [Docker 上的 IPsec VPN](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/README-zh-Hant.md)
-- [WireGuard](https://github.com/hwdsl2/docker-wireguard/blob/main/README-zh-Hant.md)
-- [OpenVPN](https://github.com/hwdsl2/docker-openvpn/blob/main/README-zh-Hant.md)
-- [Headscale](https://github.com/hwdsl2/docker-headscale/blob/main/README-zh-Hant.md)
+- [WireGuard](https://github.com/hwdsl2/docker-wireguard/blob/main/docs/README-zh-Hant.md)
+- [OpenVPN](https://github.com/hwdsl2/docker-openvpn/blob/main/docs/README-zh-Hant.md)
+- [Headscale](https://github.com/hwdsl2/docker-headscale/blob/main/docs/README-zh-Hant.md)
 
 </details>
 
@@ -125,7 +125,7 @@ docker image tag quay.io/hwdsl2/mcp-gateway hwdsl2/mcp-gateway
 
 所有變數均為可選。如果未設定，將自動使用安全預設值。
 
-此 Docker 映像使用以下變數，可在 `env` 檔案中宣告（參見[範例](mcp.env.example)）：
+此 Docker 映像使用以下變數，可在 `env` 檔案中宣告（參見[範例](../mcp.env.example)）：
 
 | 變數 | 說明 | 預設值 |
 |---|---|---|
@@ -447,7 +447,7 @@ docker rm -f mcp
 
 UplinkCrate 可作為更廣泛的自託管 AI 設定中的 MCP 工具閘道。
 
-如需完整和輕量級 Docker Compose 技術堆疊、手動 `docker run` 範例，以及結合 SpeakCrate、EmbedCrate、GatewayCrate、InferCrate、ParseCrate 和 UplinkCrate 的語音/RAG/MCP 流水線範例，請參閱 [Self-Hosted AI Stack](https://github.com/hwdsl2/self-hosted-ai-stack/blob/main/README-zh-Hant.md)。
+如需完整和輕量級 Docker Compose 技術堆疊、手動 `docker run` 範例，以及結合 SpeakCrate、EmbedCrate、GatewayCrate、InferCrate、ParseCrate 和 UplinkCrate 的語音/RAG/MCP 流水線範例，請參閱 [Self-Hosted AI Stack](https://github.com/hwdsl2/self-hosted-ai-stack/blob/main/docs/README-zh-Hant.md)。
 
 **將 UplinkCrate 連接到 GatewayCrate：**
 
