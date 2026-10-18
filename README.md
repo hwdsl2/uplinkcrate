@@ -8,7 +8,7 @@
 
 Give AI clients authenticated access to multiple [MCP](https://modelcontextprotocol.io/) tool servers through UplinkCrate. Powered by [MCPHub](https://github.com/samanhappy/mcphub) and a Caddy authentication proxy, it provides Streamable HTTP and SSE access, server routing, and a dashboard for your self-hosted tool gateway.
 
-> Previously known as `docker-mcp-gateway`, maintained by [hwdsl2](https://github.com/hwdsl2). The Docker image remains `hwdsl2/mcp-gateway`.
+> Previously known as `docker-mcp-gateway`, maintained by [hwdsl2](https://github.com/hwdsl2). The Docker image name remains `hwdsl2/mcp-gateway`.
 
 **Features:**
 

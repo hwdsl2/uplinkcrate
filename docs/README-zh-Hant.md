@@ -8,7 +8,7 @@
 
 透過 UplinkCrate，為 AI 用戶端提供經過驗證的多個 [MCP](https://modelcontextprotocol.io/) 工具伺服器存取。基於 [MCPHub](https://github.com/samanhappy/mcphub) 和 Caddy 驗證代理，提供 Streamable HTTP 和 SSE 存取、伺服器路由，以及自託管工具閘道的儀表板。
 
-> 本專案原名為 `docker-mcp-gateway`，由 [hwdsl2](https://github.com/hwdsl2) 維護。Docker 映像仍為 `hwdsl2/mcp-gateway`。
+> 本專案原名為 `docker-mcp-gateway`，由 [hwdsl2](https://github.com/hwdsl2) 維護。Docker 映像名稱仍為 `hwdsl2/mcp-gateway`。
 
 **功能特色：**
 

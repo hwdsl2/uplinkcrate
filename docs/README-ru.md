@@ -8,7 +8,7 @@
 
 Предоставьте AI-клиентам аутентифицированный доступ к нескольким серверам инструментов [MCP](https://modelcontextprotocol.io/) через UplinkCrate. Шлюз работает на базе [MCPHub](https://github.com/samanhappy/mcphub) и прокси аутентификации Caddy и поддерживает Streamable HTTP и SSE, маршрутизацию серверов и панель управления вашим самостоятельно размещённым шлюзом инструментов.
 
-> Ранее проект назывался `docker-mcp-gateway`. Его поддерживает [hwdsl2](https://github.com/hwdsl2). Docker-образ остаётся `hwdsl2/mcp-gateway`.
+> Ранее проект назывался `docker-mcp-gateway`. Его поддерживает [hwdsl2](https://github.com/hwdsl2). Имя Docker-образа остаётся прежним: `hwdsl2/mcp-gateway`.
 
 **Возможности:**
 
