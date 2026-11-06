@@ -26,12 +26,6 @@ Also available as part of the [Self-Hosted AI Stack](https://github.com/hwdsl2/s
 
 > 📘 **The Self-Hosted AI Builder’s Guide** ([ebook](https://books2read.com/aiguide?store=amazon) · [paperback](https://books2read.com/aiguide?store=amazon-paperback&format=PAPERBACK)) is a practical guide to building, securing, and operating your own private AI stack.
 
-**Related AI services:**
-
-- **Voice:** [ScribeCrate](https://github.com/hwdsl2/scribecrate), [SpeakCrate](https://github.com/hwdsl2/speakcrate)
-- **Documents & search:** [ParseCrate](https://github.com/hwdsl2/parsecrate), [EmbedCrate](https://github.com/hwdsl2/embedcrate)
-- **Models & gateways:** [InferCrate](https://github.com/hwdsl2/infercrate), [GatewayCrate](https://github.com/hwdsl2/gatewaycrate)
-
 ## Quick start
 
 **Step 1.** Start UplinkCrate:
@@ -450,6 +444,12 @@ Your configuration and API key are preserved in the `mcp-data` volume.
 UplinkCrate can be used as the MCP tool gateway in a broader self-hosted AI setup.
 
 For full and lightweight Docker Compose stacks, manual `docker run` examples, and voice/RAG/MCP pipeline examples with SpeakCrate, EmbedCrate, GatewayCrate, InferCrate, ParseCrate, and UplinkCrate, see [Self-Hosted AI Stack](https://github.com/hwdsl2/self-hosted-ai-stack).
+
+**Related AI services:**
+
+- **Voice:** [ScribeCrate](https://github.com/hwdsl2/scribecrate), [SpeakCrate](https://github.com/hwdsl2/speakcrate)
+- **Documents & search:** [ParseCrate](https://github.com/hwdsl2/parsecrate), [EmbedCrate](https://github.com/hwdsl2/embedcrate)
+- **Models & gateways:** [InferCrate](https://github.com/hwdsl2/infercrate), [GatewayCrate](https://github.com/hwdsl2/gatewaycrate)
 
 **Connect UplinkCrate to GatewayCrate:**
 
