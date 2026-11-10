@@ -12,7 +12,7 @@
 
 **功能特性：**
 
-- **默认安全：** Caddy 对 API 访问强制执行 Bearer Token 认证；首次启动时自动生成 API 密钥，并存储在持久化卷中。
+- **默认安全：** MCP 强制认证支持引导密钥和在仪表板中创建的限定范围密钥；Caddy 仍要求使用引导密钥访问仪表板和管理路由。
 - **多服务器网关：** 在单一 HTTP 端点后运行多个 MCP 工具服务器
 - **路径路由：** 通过 `/mcp` 访问所有服务器，或通过 `/mcp/<名称>` 访问指定服务器
 - **MCP 传输模式：** 支持 Streamable HTTP + SSE 两种 MCP 传输模式
@@ -39,7 +39,7 @@ docker run \
     -d hwdsl2/mcp-gateway
 ```
 
-首次启动时，系统会自动生成 API 密钥并显示在容器日志中。所有 API 请求均需此密钥。
+默认情况下，系统会在首次启动时自动生成引导 API 密钥并显示在容器日志中。该密钥仍可用于 MCP 集成和仪表板访问；在受支持的部署中，MCP 客户端也可使用在仪表板中创建且具有适当访问范围的密钥。
 
 > [!NOTE]
 > 对于面向互联网的部署，请使用[反向代理](#使用反向代理)添加 HTTPS。在这种情况下，还需将 `docker run` 命令中的 `-p 3000:3000/tcp` 替换为 `-p 127.0.0.1:3000:3000/tcp`，以防止直接访问未加密的端口。
@@ -125,7 +125,7 @@ docker image tag quay.io/hwdsl2/mcp-gateway hwdsl2/mcp-gateway
 
 | 变量 | 说明 | 默认值 |
 |---|---|---|
-| `MCP_API_KEY` | 用于认证请求的 API 密钥（未设置时自动生成） | 自动生成 |
+| `MCP_API_KEY` | 用于 MCP 集成及仪表板/管理路由外层认证的引导密钥；为空或未设置时复用已保存的密钥，仅在不存在时自动生成 | 已保存或自动生成 |
 | `MCP_PORT` | 网关的 TCP 端口（1–65535） | `3000` |
 | `MCP_HOST` | 在启动信息和 `--showkey` 输出中显示的主机名或 IP | 自动检测 |
 | `MCP_SERVERS` | 要启用的 MCP 服务器列表（逗号分隔） | `fetch` |
@@ -253,7 +253,7 @@ docker restart mcp
 
 ## 使用 API
 
-所有 API 请求均需 Bearer Token。首先获取 API 密钥：
+MCP 请求需要有效的 Bearer Token。引导密钥仍受支持，首先获取该密钥：
 
 ```bash
 uplink_api_key="$(docker exec mcp mcp_manage --getkey)"
@@ -282,6 +282,18 @@ curl http://localhost:3000/mcp/fetch \
 ```bash
 curl http://localhost:3000/health
 ```
+
+### 认证与仪表板密钥
+
+使用 JSON 存储且部署在根 URL 的标准自托管实例支持在 MCPHub 仪表板中创建的密钥。请在创建时复制实际令牌，而非列表中掩码显示的值。使用其范围允许的路由，例如仅允许 `fetch` 的密钥应使用 `/mcp/fetch`；限定服务器、组或自定义范围的密钥无法初始化全局 `/mcp` 聚合。用户级密钥仍遵循其所有者的权限，排除范围密钥仍使用原生过滤规则。
+
+默认使用 `Authorization: Bearer <token>`。若配置了其他原生 Bearer 请求头，仪表板 MCP 密钥应使用该请求头；引导密钥仍可使用标准 `Authorization`。不要在两个请求头中发送不同凭据。即使已保存的原生 Bearer 设置为 false，认证仍为强制要求，无法从仪表板关闭封装层的保护。
+
+仪表板、静态资源和管理路由仍要求引导密钥。受保护的管理 API 还需要正常的仪表板登录/JWT；引导密钥并非管理员登录凭据，仪表板 MCP 密钥也不能替代外层认证。
+
+会话绑定于单个凭据及其权限状态。重启网关或更改密钥范围、所有者权限后，请重新初始化会话。撤销、停用或删除密钥会拒绝后续请求，但已接受的工作或已打开的响应可能继续运行。单独的 GET 不构成完整 MCP 连接测试；请使用兼容客户端，或运行 `mcp_manage --test fetch`。该命令现在会执行经过认证的初始化和工具列表请求，并在失败时返回非零退出码。
+
+数据库、托管模式、非根基础路径、显式 `skipAuth`、高级身份提供方及不受支持的请求头配置使用可观察的 `legacy` 引导密钥专用模式，或在无法安全启动时停止。此模式不保证支持仪表板创建的密钥。使用 `mcp_manage --status` 查看模式。轮换密钥或更改部署模式前，请阅读[认证、升级和回滚详情（英文）](authentication.md)。
 
 ### 连接 AI 客户端
 
@@ -328,12 +340,14 @@ curl http://localhost:3000/health
 ├── .initialized        # 首次运行标记
 ├── .port               # 保存的端口（供 mcp_manage 使用）
 ├── .servers            # 已启用服务器列表（供 mcp_manage 使用）
-└── .Caddyfile          # 生成的 Caddy 配置（认证代理）
+└── .Caddy.json         # 生成的 Caddy 配置（认证代理）
 ```
 
 `mcp_settings.json` 仅在首次运行时根据 `MCP_SERVERS` 生成。后续重启将重用现有文件，保留通过仪表板所做的任何更改。
 
 备份 Docker 卷以保留您的配置和 API 密钥。
+
+MCPHub 1.2.2 会将已有仪表板 API 密钥的明文存储迁移为哈希，不改变实际令牌或访问范围。新令牌仅显示一次。请保留整个卷，包括个人凭据可能使用的 `mcp_settings.json.credentials.key` 文件。旧版上游软件无法识别这些哈希密钥。在 1.0.38 中，即使禁用了原生 Bearer 身份验证，已启用且仅存储哈希的密钥也可能导致 MCP 请求失败；降级前请阅读[回滚限制（英文）](authentication.md#upgrade-and-rollback)。
 
 ## 使用 docker-compose
 
@@ -471,9 +485,9 @@ mcp_servers:
 ## 技术细节
 
 - 基础镜像：`samanhappy/mcphub`（Python 3.13 + Node.js 22）
-- 认证代理：[Caddy](https://caddyserver.com)（始终启用，强制执行 Bearer Token 认证）
+- 认证：[Caddy](https://caddyserver.com) 与进程内强制 MCP 策略；legacy 模式保留仅接受引导密钥的代理
 - 网关：[MCPHub](https://github.com/samanhappy/mcphub)（多服务器 MCP 集线器）
-- MCPHub 内部端口：`3001`（未发布；Caddy 从 `MCP_PORT` 代理）
+- MCPHub 内部端口：`3001`（绑定到 IPv4 回环地址；Caddy 从 `MCP_PORT` 代理）
 - 数据目录：`/var/lib/mcp`（Docker 卷）
 - 网关 API：`http://localhost:3000`（或您配置的端口）
 - MCP 端点：`http://localhost:3000/mcp`

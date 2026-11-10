@@ -12,7 +12,7 @@
 
 **功能特色：**
 
-- **預設安全：** Caddy 對 API 存取強制執行 Bearer Token 驗證；首次啟動時自動產生 API 金鑰，並儲存在持久化卷中。
+- **預設安全：** MCP 強制驗證支援引導金鑰與在儀表板建立的限定範圍金鑰；Caddy 仍要求使用引導金鑰存取儀表板與管理路由。
 - **多伺服器閘道：** 在單一 HTTP 端點後執行多個 MCP 工具伺服器
 - **路徑路由：** 透過 `/mcp` 存取所有伺服器，或透過 `/mcp/<名稱>` 存取指定伺服器
 - **MCP 傳輸模式：** 支援 Streamable HTTP + SSE 兩種 MCP 傳輸模式
@@ -39,7 +39,7 @@ docker run \
     -d hwdsl2/mcp-gateway
 ```
 
-首次啟動時，系統會自動產生 API 金鑰並顯示在容器日誌中。所有 API 請求均需此金鑰。
+預設情況下，系統會在首次啟動時自動產生引導 API 金鑰並顯示在容器日誌中。該金鑰仍可用於 MCP 整合與儀表板存取；在支援的部署中，MCP 用戶端也可使用在儀表板建立且具有適當存取範圍的金鑰。
 
 > [!NOTE]
 > 對於面向網際網路的部署，請使用[反向代理](#使用反向代理)新增 HTTPS。在這種情況下，還需將 `docker run` 命令中的 `-p 3000:3000/tcp` 替換為 `-p 127.0.0.1:3000:3000/tcp`，以防止直接存取未加密的連接埠。
@@ -125,7 +125,7 @@ docker image tag quay.io/hwdsl2/mcp-gateway hwdsl2/mcp-gateway
 
 | 變數 | 說明 | 預設值 |
 |---|---|---|
-| `MCP_API_KEY` | 用於驗證請求的 API 金鑰（未設定時自動產生） | 自動產生 |
+| `MCP_API_KEY` | 用於 MCP 整合與儀表板/管理路由外層驗證的引導金鑰；為空或未設定時重用已儲存的金鑰，僅在不存在時自動產生 | 已儲存或自動產生 |
 | `MCP_PORT` | 閘道的 TCP 連接埠（1–65535） | `3000` |
 | `MCP_HOST` | 在啟動資訊和 `--showkey` 輸出中顯示的主機名稱或 IP | 自動偵測 |
 | `MCP_SERVERS` | 要啟用的 MCP 伺服器清單（逗號分隔） | `fetch` |
@@ -253,7 +253,7 @@ docker restart mcp
 
 ## 使用 API
 
-所有 API 請求均需 Bearer Token。首先取得 API 金鑰：
+MCP 請求需要有效的 Bearer Token。引導金鑰仍受支援，首先取得該金鑰：
 
 ```bash
 uplink_api_key="$(docker exec mcp mcp_manage --getkey)"
@@ -282,6 +282,18 @@ curl http://localhost:3000/mcp/fetch \
 ```bash
 curl http://localhost:3000/health
 ```
+
+### 驗證與儀表板金鑰
+
+使用 JSON 儲存且部署在根 URL 的標準自託管執行個體支援在 MCPHub 儀表板建立的金鑰。請在建立時複製實際權杖，而非清單中遮蔽顯示的值。使用其範圍允許的路由，例如僅允許 `fetch` 的金鑰應使用 `/mcp/fetch`；限定伺服器、群組或自訂範圍的金鑰無法初始化全域 `/mcp` 彙總。使用者層級金鑰仍遵循其擁有者的權限，排除範圍金鑰仍使用原生篩選規則。
+
+預設使用 `Authorization: Bearer <token>`。若設定了其他原生 Bearer 請求標頭，儀表板 MCP 金鑰應使用該標頭；引導金鑰仍可使用標準 `Authorization`。不要在兩個標頭傳送不同憑證。即使已儲存的原生 Bearer 設定為 false，驗證仍為強制要求，無法從儀表板關閉封裝層的保護。
+
+儀表板、靜態資源與管理路由仍要求引導金鑰。受保護的管理 API 還需要正常的儀表板登入/JWT；引導金鑰並非管理員登入憑證，儀表板 MCP 金鑰也不能取代外層驗證。
+
+工作階段綁定於單一憑證及其權限狀態。重新啟動閘道或變更金鑰範圍、擁有者權限後，請重新初始化工作階段。撤銷、停用或刪除金鑰會拒絕後續請求，但已接受的工作或已開啟的回應可能繼續執行。單獨的 GET 不構成完整 MCP 連線測試；請使用相容用戶端，或執行 `mcp_manage --test fetch`。此命令現在會執行經過驗證的初始化與工具清單請求，並在失敗時傳回非零結束代碼。
+
+資料庫、託管模式、非根基礎路徑、明確的 `skipAuth`、進階身分提供者與不支援的標頭設定使用可觀察的 `legacy` 引導金鑰專用模式，或在無法安全啟動時停止。此模式不保證支援儀表板建立的金鑰。使用 `mcp_manage --status` 查看模式。輪換金鑰或變更部署模式前，請閱讀[驗證、升級與回復詳情（英文）](authentication.md)。
 
 ### 連接 AI 客戶端
 
@@ -328,12 +340,14 @@ curl http://localhost:3000/health
 ├── .initialized        # 首次執行標記
 ├── .port               # 儲存的連接埠（供 mcp_manage 使用）
 ├── .servers            # 已啟用伺服器清單（供 mcp_manage 使用）
-└── .Caddyfile          # 產生的 Caddy 設定（驗證代理）
+└── .Caddy.json         # 產生的 Caddy 設定（驗證代理）
 ```
 
 `mcp_settings.json` 僅在首次執行時根據 `MCP_SERVERS` 產生。後續重新啟動將重複使用現有檔案，保留透過儀表板所做的任何變更。
 
 備份 Docker 卷以保留您的設定和 API 金鑰。
+
+MCPHub 1.2.2 會將現有儀表板 API 金鑰的明文儲存遷移為雜湊，不變更實際權杖或存取範圍。新權杖僅顯示一次。請保留整個卷，包括個人憑證可能使用的 `mcp_settings.json.credentials.key` 檔案。舊版上游軟體無法辨識這些雜湊金鑰。在 1.0.38 中，即使停用了原生 Bearer 驗證，已啟用且僅儲存雜湊的金鑰也可能導致 MCP 請求失敗；降級前請閱讀[回復限制（英文）](authentication.md#upgrade-and-rollback)。
 
 ## 使用 docker-compose
 
@@ -471,9 +485,9 @@ mcp_servers:
 ## 技術細節
 
 - 基礎映像：`samanhappy/mcphub`（Python 3.13 + Node.js 22）
-- 驗證代理：[Caddy](https://caddyserver.com)（始終啟用，強制執行 Bearer Token 驗證）
+- 驗證：[Caddy](https://caddyserver.com) 與處理程序內強制 MCP 原則；legacy 模式保留僅接受引導金鑰的代理
 - 閘道：[MCPHub](https://github.com/samanhappy/mcphub)（多伺服器 MCP 集線器）
-- MCPHub 內部連接埠：`3001`（未發布；Caddy 從 `MCP_PORT` 代理）
+- MCPHub 內部連接埠：`3001`（綁定至 IPv4 回環位址；Caddy 從 `MCP_PORT` 代理）
 - 資料目錄：`/var/lib/mcp`（Docker 卷）
 - 閘道 API：`http://localhost:3000`（或您設定的連接埠）
 - MCP 端點：`http://localhost:3000/mcp`

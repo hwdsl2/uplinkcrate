@@ -12,7 +12,7 @@ Give AI clients authenticated access to multiple [MCP](https://modelcontextproto
 
 **Features:**
 
-- **Secure by default:** Caddy enforces Bearer token authentication for API access; an API key is auto-generated on first start and stored in the persistent volume.
+- **Secure by default:** mandatory MCP authentication supports the bootstrap key and scoped dashboard-created keys; Caddy keeps the dashboard and management routes behind the bootstrap key.
 - **Multi-server gateway:** run multiple MCP tool servers behind a single HTTP endpoint.
 - **Path-based routing:** access all servers at `/mcp` or individual servers at `/mcp/<name>`.
 - **MCP transports:** supports Streamable HTTP and SSE.
@@ -39,7 +39,7 @@ docker run \
     -d hwdsl2/mcp-gateway
 ```
 
-On first start, an API key is auto-generated and displayed in the container logs. All API requests require this key.
+By default, a bootstrap API key is auto-generated on first start and displayed in the container logs. It continues to work for MCP integrations and dashboard access; MCP clients can also use appropriately scoped dashboard-created keys in supported deployments.
 
 > [!NOTE]
 > For internet-facing deployments, use a [reverse proxy](#using-a-reverse-proxy) to add HTTPS. Also replace `-p 3000:3000/tcp` with `-p 127.0.0.1:3000:3000/tcp` in the `docker run` command above, to prevent direct access to the unencrypted port.
@@ -125,7 +125,7 @@ This Docker image uses the following variables, that can be declared in an `env`
 
 | Variable | Description | Default |
 |---|---|---|
-| `MCP_API_KEY` | API key for authenticating requests (auto-generated if not set) | Auto-generated |
+| `MCP_API_KEY` | Bootstrap key for MCP integrations and the outer dashboard/management gate; empty/unset reuses the stored key, generating one only when absent | Persisted or auto-generated |
 | `MCP_PORT` | TCP port for the gateway (1–65535) | `3000` |
 | `MCP_HOST` | Hostname or IP shown in startup info and `--showkey` output | Auto-detected |
 | `MCP_SERVERS` | Comma-separated list of MCP servers to enable | `fetch` |
@@ -253,7 +253,7 @@ docker restart mcp
 
 ## Using the API
 
-All API requests require a Bearer token. Retrieve the API key first:
+MCP requests require a valid Bearer token. The bootstrap key remains supported; retrieve it first:
 
 ```bash
 uplink_api_key="$(docker exec mcp mcp_manage --getkey)"
@@ -282,6 +282,18 @@ Open `http://localhost:3000/` in a browser with `Authorization: Bearer <key>`, o
 ```bash
 curl http://localhost:3000/health
 ```
+
+### Authentication and dashboard keys
+
+Standard self-hosted, JSON-backed deployments at the root URL support keys created in the MCPHub dashboard. Copy the actual token when it is created, not its masked listing. Use a route allowed by its scope, such as `/mcp/fetch` for a key limited to `fetch`; server-, group- and custom-limited keys cannot initialize the global `/mcp` aggregate. User-level keys retain their owner's permissions, and exclusion-scoped keys retain native filtering.
+
+By default, use `Authorization: Bearer <token>`. If you configure a different native bearer header, use that header for dashboard-created MCP keys; the bootstrap key still works through standard `Authorization`. Do not send conflicting credentials in both headers. Authentication remains mandatory even if the stored native bearer setting is false; the dashboard cannot disable the wrapper's protection.
+
+Dashboard/static and management routes still require the bootstrap key. Protected management APIs additionally require the normal dashboard login/JWT; the bootstrap key is not an administrator login. Dashboard-created MCP keys do not replace that outer gate.
+
+Sessions belong to one credential and permission state. Reinitialize after restarting the gateway or changing a key's scopes or owner permissions. Revoked/disabled/deleted keys fail on later requests, but already accepted work or an open response may continue. A bare GET is not a complete MCP connection test; use a compatible client or `mcp_manage --test fetch`, which now performs an authenticated initialize and tools listing and exits nonzero on failure.
+
+Database, hosted, nonroot base-path, intentional `skipAuth`, advanced identity-provider and unsupported header configurations use observable `legacy` bootstrap-only mode, or stop if startup is unsafe. Dashboard-created key support is not claimed in that mode. Check `mcp_manage --status`. See [authentication, upgrade and rollback details](docs/authentication.md) before rotating keys or changing deployment mode.
 
 ### Connecting AI clients
 
@@ -328,12 +340,14 @@ All gateway data is stored in the Docker volume (`/var/lib/mcp` inside the conta
 ├── .initialized        # First-run marker
 ├── .port               # Saved port (used by mcp_manage)
 ├── .servers            # Enabled servers list (used by mcp_manage)
-└── .Caddyfile          # Generated Caddy config (auth proxy)
+└── .Caddy.json         # Generated Caddy config (auth proxy)
 ```
 
 `mcp_settings.json` is generated from `MCP_SERVERS` on first run only. Subsequent restarts reuse the existing file, preserving any changes made via the dashboard.
 
 Back up the Docker volume to preserve your configuration and API key.
+
+MCPHub 1.2.2 hashes existing raw dashboard API keys without changing their tokens or scopes. New tokens are shown only once. Preserve the entire volume, including any `mcp_settings.json.credentials.key` file used for personal credentials. Older upstream versions cannot interpret hashed keys. Enabled hash-only keys can also break MCP requests in 1.0.38 even with native Bearer authentication disabled; read the [rollback limits](docs/authentication.md#upgrade-and-rollback) before downgrading.
 
 ## Using docker-compose
 
@@ -471,9 +485,9 @@ This image uses public GitHub release asset download counts for anonymous, aggre
 ## Technical details
 
 - Base image: `samanhappy/mcphub` (Python 3.13 + Node.js 22)
-- Auth proxy: [Caddy](https://caddyserver.com) (always active, enforces Bearer token auth)
+- Authentication: [Caddy](https://caddyserver.com) plus an in-process mandatory MCP policy; legacy mode retains the bootstrap-only proxy
 - Gateway: [MCPHub](https://github.com/samanhappy/mcphub) (multi-server MCP hub)
-- MCPHub internal port: `3001` (not published; Caddy proxies from `MCP_PORT`)
+- MCPHub internal port: `3001` (bound to IPv4 loopback; Caddy proxies from `MCP_PORT`)
 - Data directory: `/var/lib/mcp` (Docker volume)
 - Gateway API: `http://localhost:3000` (or your configured port)
 - MCP endpoint: `http://localhost:3000/mcp`
