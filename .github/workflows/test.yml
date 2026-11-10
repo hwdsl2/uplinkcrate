@@ -8,6 +8,7 @@ on:
       - '.github/workflows/test.yml'
       - '.github/workflows/shellcheck.yml'
       - '.github/workflows/mcp_gateway_test.yml'
+      - '.github/workflows/tests/**'
 
 permissions:
   contents: read

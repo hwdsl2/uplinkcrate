@@ -1,0 +1,22 @@
+# Compatibility fixture using the previous wrapper checkout, MCPHub 1.0.38
+# and the candidate's checksum-verified Caddy binary.
+FROM mcp-gateway-test AS verified-caddy
+FROM samanhappy/mcphub:1.0.38
+
+WORKDIR /opt/src
+COPY --from=verified-caddy /usr/local/bin/caddy /usr/local/bin/caddy
+COPY run.sh manage.sh mcp-config.cjs LICENSE.md ./
+# This release tag has package version "dev"; verify its authentication source.
+RUN printf '%s  %s\n' \
+      c5b4c1f013579e4b44e8340915da02f811eb917764db7765637db16bb87555dd /app/src/services/sseService.ts \
+      4e8ffe541e65f07464bf25731355b7c634b7bba1e16ab7606e733db7d5e846b8 /app/src/dao/BearerKeyDao.ts \
+      403edcd61c2362bc102341bd9ec755739401b7ddf5e1bfb31421a652ed48d15d /app/src/utils/safeCompare.ts \
+      | sha256sum -c - \
+    && chmod 755 run.sh manage.sh mcp-config.cjs \
+    && ln -s /opt/src/manage.sh /usr/local/bin/mcp_manage \
+    && mkdir -p /var/lib/mcp
+
+EXPOSE 3000/tcp
+VOLUME ["/var/lib/mcp"]
+ENTRYPOINT []
+CMD ["/opt/src/run.sh"]

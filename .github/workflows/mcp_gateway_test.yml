@@ -7,20 +7,33 @@ permissions:
 
 jobs:
   mcp_gateway_test:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     if: github.repository_owner == 'hwdsl2'
     strategy:
       matrix:
-        test_id: [no-env, with-env, with-shared-vol]
+        include:
+          - test_id: no-env
+            runner: ubuntu-24.04
+          - test_id: with-env
+            runner: ubuntu-24.04
+          - test_id: with-shared-vol
+            runner: ubuntu-24.04
+          - test_id: arm64
+            runner: ubuntu-24.04-arm
       fail-fast: false
     env:
       TEST_ID: ${{ matrix.test_id }}
+      TEST_NETWORK: uplink-test-${{ github.run_id }}-${{ matrix.test_id }}
+      TEST_DATA: uplink-data-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.test_id }}
+      TEST_SHARED: uplink-shared-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.test_id }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Test
         run: |
+          set -eo pipefail
           [ ! -x /usr/bin/docker ] && exit 1
 
           cd "$GITHUB_WORKSPACE"
@@ -92,34 +105,76 @@ jobs:
           }
           rm -f "$CONFIG_FILE" "$DEFAULT_FILE" "$BAD_ERR"
 
-          set -x
-
           docker build -t mcp-gateway-test .
+          echo "Tested revision: $GITHUB_SHA"
+          docker image inspect -f 'Candidate {{.Id}} {{.Architecture}}' mcp-gateway-test
+          docker run --rm --workdir /app --entrypoint bash mcp-gateway-test -ec '
+            node --version
+            pnpm --version
+            bash --version | sed -n "1p"
+            caddy version
+            node -p "\"Express \" + require(\"express/package.json\").version"
+          '
+          docker run --rm --entrypoint node \
+            -v "$GITHUB_WORKSPACE:/wrapper:ro" mcp-gateway-test \
+            --experimental-strip-types --test /wrapper/.github/workflows/tests/*.test.mjs
+          docker run --rm --workdir /app --entrypoint pnpm mcp-gateway-test exec jest --runInBand \
+            src/services/sseService.test.ts src/middlewares/auth.test.ts \
+            tests/utils/bearerAuth.test.ts tests/dao/bearerKeyDao.test.ts \
+            tests/integration/bearer-key-hashing.test.ts tests/integration/bearer-exclude-scope.test.ts \
+            tests/integration/group-rename-bearer-scope.test.ts tests/integration/system-config-authorization.test.ts
+          CONSUMER_SOURCE="${RUNNER_TEMP}/uplink-consumer-${TEST_ID}.cjs"
+          CONSUMER_REF=f31b5adfddb16f28071aa20e4e898079a524761b
+          curl -fsSL --connect-timeout 15 --max-time 60 \
+            "https://raw.githubusercontent.com/Mintplex-Labs/anything-llm/${CONSUMER_REF}/server/utils/MCP/hypervisor/index.js" \
+            -o "$CONSUMER_SOURCE"
+          curl -fsSL --connect-timeout 15 --max-time 60 \
+            "https://raw.githubusercontent.com/Mintplex-Labs/anything-llm/${CONSUMER_REF}/LICENSE" \
+            -o "${CONSUMER_SOURCE}.LICENSE"
+          printf '%s  %s\n' 1dad0616ac697e5671d5b90946b2f4727b28a1f2f35df45608fe3ebcfa2d40c7 "$CONSUMER_SOURCE" | sha256sum -c -
+          docker run --rm --entrypoint node \
+            -v "$GITHUB_WORKSPACE:/wrapper:ro" mcp-gateway-test \
+            /wrapper/.github/workflows/tests/check_proxy_headers.mjs /app /usr/local/bin/caddy
+          docker run --rm --entrypoint node \
+            -v "$GITHUB_WORKSPACE:/wrapper:ro" \
+            -v "$CONSUMER_SOURCE:/fixtures/anythingllm-hypervisor.cjs:ro" \
+            -v "${CONSUMER_SOURCE}.LICENSE:/fixtures/anythingllm-LICENSE:ro" mcp-gateway-test \
+            /wrapper/.github/workflows/tests/check_policy_runtime.mjs /app /usr/local/bin/caddy /fixtures/anythingllm-hypervisor.cjs
+          docker network create --ipv6 --subnet fd42:7570:6c69::/64 "$TEST_NETWORK"
+          GATEWAY_PORT=3000
 
           if [ "$TEST_ID" = "with-env" ]; then
+            GATEWAY_PORT=3100
+            printf '\nMCP_API_KEY=custom-fixture-bootstrap\nMCP_PORT=3100\n' >> mcp.env.example
             docker run \
               --name "$TEST_ID" \
+              --network "$TEST_NETWORK" \
               --restart=always \
               -e MCP_DISABLE_USAGE_COUNTS=1 \
-              -v mcp-gateway-test-data:/var/lib/mcp \
+              -e MCP_API_KEY=stale-container-fixture \
+              -e MCP_PORT=3200 \
+              -v "$TEST_DATA:/var/lib/mcp" \
               -v ./mcp.env.example:/mcp.env:ro \
-              -p 3000:3000/tcp \
+              -p 3000:3100/tcp \
               -d mcp-gateway-test
-          elif [ "$TEST_ID" = "no-env" ]; then
+          elif [ "$TEST_ID" = "no-env" ] || [ "$TEST_ID" = "arm64" ]; then
             docker run \
               --name "$TEST_ID" \
+              --network "$TEST_NETWORK" \
               --restart=always \
               -e MCP_DISABLE_USAGE_COUNTS=1 \
-              -v mcp-gateway-test-data:/var/lib/mcp \
+              -v "$TEST_DATA:/var/lib/mcp" \
               -p 3000:3000/tcp \
               -d mcp-gateway-test
           elif [ "$TEST_ID" = "with-shared-vol" ]; then
             docker run \
               --name "$TEST_ID" \
+              --network "$TEST_NETWORK" \
               --restart=always \
               -e MCP_DISABLE_USAGE_COUNTS=1 \
-              -v mcp-gateway-test-data:/var/lib/mcp \
-              -v mcp-gateway-test-shared:/var/lib/mcp-shared \
+              -v "$TEST_DATA:/var/lib/mcp" \
+              -v "$TEST_SHARED:/var/lib/mcp-shared" \
+              --network-alias mcp \
               -p 3000:3000/tcp \
               -d mcp-gateway-test
           fi
@@ -127,7 +182,7 @@ jobs:
           # Wait for gateway to be ready (up to 120 seconds)
           i=0
           while [ "$i" -lt 120 ]; do
-            if docker exec "$TEST_ID" curl -sf http://127.0.0.1:3000/health >/dev/null 2>&1; then
+            if docker exec "$TEST_ID" curl -sf "http://127.0.0.1:${GATEWAY_PORT}/health" >/dev/null 2>&1; then
               break
             fi
             sleep 1
@@ -138,14 +193,25 @@ jobs:
           docker logs "$TEST_ID"
 
           # Verify health endpoint (no auth required)
-          docker exec "$TEST_ID" curl -sf http://127.0.0.1:3000/health
+          docker exec "$TEST_ID" curl -sf "http://127.0.0.1:${GATEWAY_PORT}/health"
+          # Drain command output: grep -q can make docker exec fail with SIGPIPE.
+          docker exec "$TEST_ID" mcp_manage --status | grep -F 'Authentication: delegated' >/dev/null
+          GATEWAY_IP=$(docker inspect -f "{{(index .NetworkSettings.Networks \"$TEST_NETWORK\").IPAddress}}" "$TEST_ID")
+          docker run --rm --network "$TEST_NETWORK" --entrypoint node \
+            -v "$GITHUB_WORKSPACE:/wrapper:ro" mcp-gateway-test \
+            /wrapper/.github/workflows/tests/check_network_boundary.mjs "$GATEWAY_IP" "$GATEWAY_PORT"
+          GATEWAY_IPV6=$(docker inspect -f "{{(index .NetworkSettings.Networks \"$TEST_NETWORK\").GlobalIPv6Address}}" "$TEST_ID")
+          [ -n "$GATEWAY_IPV6" ] || { echo "Expected an IPv6 address on the disposable dual-stack network"; exit 1; }
+          docker run --rm --network "$TEST_NETWORK" --entrypoint node \
+            -v "$GITHUB_WORKSPACE:/wrapper:ro" mcp-gateway-test \
+            /wrapper/.github/workflows/tests/check_network_boundary.mjs "$GATEWAY_IPV6" "$GATEWAY_PORT"
 
-          # Verify generated config remains valid JSON and leaves MCPHub bearer auth disabled.
+          # Preserve the stored legacy flag; behavior, not that flag, proves enforcement.
           docker exec "$TEST_ID" node -e '
             const fs = require("fs");
             const cfg = JSON.parse(fs.readFileSync("/var/lib/mcp/mcp_settings.json", "utf8"));
             if (cfg.systemConfig?.routing?.enableBearerAuth !== false) {
-              throw new Error("MCPHub bearer auth must stay disabled behind Caddy");
+              throw new Error("Wrapper must preserve the generated legacy bearer flag");
             }
             if (!Array.isArray(cfg.bearerKeys) || cfg.bearerKeys.length !== 0) {
               throw new Error("Expected generated bearerKeys to be an empty array");
@@ -155,6 +221,9 @@ jobs:
           # Get API key
           MCP_KEY=$(docker exec "$TEST_ID" mcp_manage --getkey)
           [ -z "$MCP_KEY" ] && exit 1
+          if [ "$TEST_ID" = "with-env" ]; then
+            [ "$MCP_KEY" = custom-fixture-bootstrap ] || { echo "Effective env-file key was not used"; exit 1; }
+          fi
 
           # Verify mcp_manage commands
           docker exec "$TEST_ID" mcp_manage --showkey
@@ -183,16 +252,16 @@ jobs:
             || { echo "Expected 200, got $http_code"; exit 1; }
 
           # Verify mcp_manage --status reports both services running
-          docker exec "$TEST_ID" mcp_manage --status | grep -q "MCPHub:  running" \
+          docker exec "$TEST_ID" mcp_manage --status | grep -F "MCPHub:  running" >/dev/null \
             || { echo "MCPHub not running per --status"; exit 1; }
-          docker exec "$TEST_ID" mcp_manage --status | grep -q "Caddy:   running" \
+          docker exec "$TEST_ID" mcp_manage --status | grep -F "Caddy:   running" >/dev/null \
             || { echo "Caddy not running per --status"; exit 1; }
 
           # Verify fetch server endpoint
           docker exec "$TEST_ID" mcp_manage --test fetch
 
           # Verify memory server endpoint (only enabled when MCP_SERVERS includes 'memory')
-          if docker exec "$TEST_ID" mcp_manage --list | grep -q 'memory'; then
+          if docker exec "$TEST_ID" mcp_manage --list | grep -F 'memory' >/dev/null; then
             docker exec "$TEST_ID" mcp_manage --test memory
           fi
 
@@ -203,7 +272,7 @@ jobs:
           # Wait for gateway to come back (up to 120 seconds)
           i=0
           while [ "$i" -lt 120 ]; do
-            if docker exec "$TEST_ID" curl -sf http://127.0.0.1:3000/health >/dev/null 2>&1; then
+            if docker exec "$TEST_ID" curl -sf "http://127.0.0.1:${GATEWAY_PORT}/health" >/dev/null 2>&1; then
               break
             fi
             sleep 1
@@ -214,7 +283,7 @@ jobs:
           docker logs "$TEST_ID"
 
           # Verify gateway is healthy after restart
-          docker exec "$TEST_ID" curl -sf http://127.0.0.1:3000/health
+          docker exec "$TEST_ID" curl -sf "http://127.0.0.1:${GATEWAY_PORT}/health"
 
           # Verify API key persisted across restart
           MCP_KEY2=$(docker exec "$TEST_ID" mcp_manage --getkey)
@@ -235,14 +304,162 @@ jobs:
           if [ "$TEST_ID" = "with-shared-vol" ]; then
             SHARED_KEY=$(docker exec "$TEST_ID" cat /var/lib/mcp-shared/.api_key 2>/dev/null || true)
             [ "$MCP_KEY" = "$SHARED_KEY" ] \
-              || { echo "API key not copied to shared volume (expected '$MCP_KEY', got '$SHARED_KEY')"; exit 1; }
+              || { echo "Shared API key does not match the effective key"; exit 1; }
           fi
 
           exit 0
+      - name: Check out previous wrapper
+        if: matrix.test_id == 'no-env' || matrix.test_id == 'arm64'
+        uses: actions/checkout@v7
+        with:
+          ref: 692ceb5ed5f14c8122b3a725db8d2ce8bf9af540
+          path: .uplink-previous
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /run.sh
+            /manage.sh
+            /mcp-config.cjs
+            /LICENSE.md
+      - name: Upgrade and restart
+        if: matrix.test_id == 'no-env' || matrix.test_id == 'arm64'
+        run: |
+          # Build the previous-version compatibility fixture.
+          docker build -f .github/workflows/tests/fixtures/Dockerfile.previous \
+            -t mcp-gateway-previous-test .uplink-previous
+          docker image inspect -f 'Previous fixture {{.Id}} {{.Architecture}}' mcp-gateway-previous-test
+          node .github/workflows/tests/check_image_upgrade.mjs mcp-gateway-test \
+            mcp-gateway-previous-test \
+            "uplink-compat-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${TEST_ID}" "$TEST_NETWORK"
+      - name: Fail-closed startup
+        timeout-minutes: 8
+        run: |
+          node .github/workflows/tests/check_failed_startup.mjs mcp-gateway-test \
+            "uplink-fail-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${TEST_ID}" "$TEST_NETWORK"
+      - name: Obsolete proxy configuration cleanup
+        timeout-minutes: 6
+        run: |
+          node .github/workflows/tests/check_cleanup_startup.mjs mcp-gateway-test \
+            "uplink-clean-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${TEST_ID}" "$TEST_NETWORK"
+      - name: Shared-key consumer and rotation
+        if: matrix.test_id == 'with-shared-vol'
+        run: |
+          set -eo pipefail
+          CONSUMER_IMAGE=hwdsl2/litellm-server
+          CONSUMER_NAME="${TEST_ID}-consumer"
+          docker pull "$CONSUMER_IMAGE"
+          docker image inspect -f 'Consumer {{.Id}} {{json .RepoDigests}}' "$CONSUMER_IMAGE"
+          start_consumer() {
+            local explicit_key="${1:-}"
+            docker run -d --name "$CONSUMER_NAME" --network "$TEST_NETWORK" \
+              -e LITELLM_DISABLE_USAGE_COUNTS=1 -e LITELLM_HOST=fixture.invalid \
+              -e LITELLM_MASTER_KEY=sk-synthetic-ci-master \
+              -e LITELLM_MCP_URL=http://mcp:3000/mcp -e "LITELLM_MCP_API_KEY=$explicit_key" \
+              -v "$TEST_SHARED:/var/lib/mcp-shared:ro" -v "${TEST_DATA}-consumer:/etc/litellm" \
+              -v "$GITHUB_WORKSPACE:/wrapper:ro" "$CONSUMER_IMAGE"
+          }
+          wait_consumer() {
+            for _ in $(seq 1 120); do
+              if docker exec "$CONSUMER_NAME" curl -fsS --connect-timeout 1 --max-time 2 \
+                http://127.0.0.1:4000/health/liveliness >/dev/null 2>&1; then return 0; fi
+              sleep 1
+            done
+            docker logs --tail 100 "$CONSUMER_NAME"
+            return 1
+          }
+          check_consumer() {
+            docker exec "$CONSUMER_NAME" python3 /wrapper/.github/workflows/tests/check_shared_consumer.py "$1"
+          }
+          ORIGINAL_KEY=$(docker exec "$TEST_ID" mcp_manage --getkey)
+          start_consumer
+          wait_consumer
+          check_consumer current
+
+          # Rotate only while stopped; the next start atomically refreshes the shared file.
+          docker stop "$TEST_ID"
+          docker run --rm --entrypoint node -v "$TEST_DATA:/var/lib/mcp" mcp-gateway-test \
+            -e 'require("fs").writeFileSync("/var/lib/mcp/.api_key", "rotated-shared-fixture", { mode: 0o600 })'
+          docker start "$TEST_ID"
+          for _ in $(seq 1 120); do
+            if docker exec "$TEST_ID" curl -fsS --connect-timeout 1 --max-time 2 \
+              http://127.0.0.1:3000/health >/dev/null 2>&1 \
+              && [ "$(docker exec "$TEST_ID" cat /var/lib/mcp-shared/.api_key)" = rotated-shared-fixture ]; then break; fi
+            sleep 1
+          done
+          [ "$(docker exec "$TEST_ID" cat /var/lib/mcp-shared/.api_key)" = rotated-shared-fixture ]
+          check_consumer stale
+          docker restart "$CONSUMER_NAME"
+          wait_consumer
+          check_consumer current
+
+          # An explicit override wins over the shared file until explicitly replaced.
+          docker rm -f "$CONSUMER_NAME"
+          start_consumer "$ORIGINAL_KEY"
+          wait_consumer
+          check_consumer stale
+          docker rm -f "$CONSUMER_NAME"
+          start_consumer rotated-shared-fixture
+          wait_consumer
+          check_consumer current
+      - name: Service lifetime
+        run: |
+          set -e
+          docker update --restart=no "$TEST_ID"
+          # Simulate a crash. SIGTERM can wait for legitimate long-lived streams.
+          docker exec "$TEST_ID" pkill -KILL -x caddy
+          for _ in $(seq 1 300); do
+            if [ "$(docker inspect -f '{{.State.Running}}' "$TEST_ID")" = false ]; then break; fi
+            sleep 0.1
+          done
+          [ "$(docker inspect -f '{{.State.Running}}' "$TEST_ID")" = false ] \
+            || { echo "Wrapper must exit when its proxy exits"; exit 1; }
+          [ "$(docker inspect -f '{{.State.ExitCode}}' "$TEST_ID")" != 0 ] \
+            || { echo "An unexpected child exit must fail the wrapper"; exit 1; }
+      - name: ARM64 Compose dashboard keys
+        if: matrix.test_id == 'arm64'
+        timeout-minutes: 8
+        run: |
+          node .github/workflows/tests/check_compose_image.mjs mcp-gateway-test \
+            "uplink-compose-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${TEST_ID}"
       - name: Clear
         if: always()
         run: |
+          : "${RUNNER_TEMP:?Missing runner temporary directory}"
+          docker rm -f "${TEST_ID}-consumer" || true
           docker rm -f "$TEST_ID" || true
-          docker volume rm mcp-gateway-test-data || true
-          docker volume rm mcp-gateway-test-shared || true
+          COMPAT_PREFIX="uplink-compat-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${TEST_ID}"
+          docker rm -f "${COMPAT_PREFIX}-gateway" || true
+          docker volume rm "${COMPAT_PREFIX}-data" || true
+          node .github/workflows/tests/image_scenarios.mjs | while read -r kind scenario; do
+            PREFIX="uplink-${kind}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${TEST_ID}"
+            docker rm -f "${PREFIX}-${scenario}" || true
+            docker volume rm "${PREFIX}-${scenario}-data" || true
+          done
+          for kind in fail clean; do
+            rm -rf -- "${RUNNER_TEMP}/uplink-${kind}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${TEST_ID}"
+          done
+          if [ "$TEST_ID" = arm64 ]; then
+            COMPOSE_PREFIX="uplink-compose-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${TEST_ID}"
+            COMPOSE_DIR="${RUNNER_TEMP}/${COMPOSE_PREFIX}"
+            docker rm -f "${COMPOSE_PREFIX}-probe" || true
+            if [ -f "${COMPOSE_DIR}/compose.json" ]; then
+              docker compose --project-name "$COMPOSE_PREFIX" --project-directory "$COMPOSE_DIR" \
+                -f "${COMPOSE_DIR}/compose.json" down --volumes --remove-orphans || true
+            fi
+            docker rm -f "${COMPOSE_PREFIX}-gateway" || true
+            docker network rm "${COMPOSE_PREFIX}-network" || true
+            if [ -d "$COMPOSE_DIR" ]; then
+              docker run --rm --entrypoint node \
+                --mount "type=bind,src=${COMPOSE_DIR},dst=/cleanup" mcp-gateway-test -e \
+                'const fs=require("fs"); for(const name of ["data","client"]) fs.rmSync("/cleanup/"+name,{recursive:true,force:true});' || true
+              rm -rf -- "$COMPOSE_DIR"
+            fi
+          fi
+          docker network rm "$TEST_NETWORK" || true
+          docker volume rm "$TEST_DATA" || true
+          docker volume rm "$TEST_SHARED" || true
+          docker volume rm "${TEST_DATA}-consumer" || true
           docker rmi mcp-gateway-test || true
+          docker rmi mcp-gateway-previous-test || true
+          rm -rf -- "${GITHUB_WORKSPACE:?Missing workspace}/.uplink-previous"
+          rm -f "${RUNNER_TEMP}/uplink-consumer-${TEST_ID}.cjs" "${RUNNER_TEMP}/uplink-consumer-${TEST_ID}.cjs.LICENSE"
