@@ -4,6 +4,8 @@ Notable changes to UplinkCrate are documented here.
 
 ## 2026-11-09
 
+Release: `2026.11.1`
+
 ### Fixed
 
 - Support dashboard-created MCP keys and their native scopes in standard
