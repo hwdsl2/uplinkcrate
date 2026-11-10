@@ -4,7 +4,7 @@
 # This work is licensed under the MIT License
 # See: https://opensource.org/licenses/MIT
 
-FROM samanhappy/mcphub:1.0.38@sha256:c8c4991f6e40a12089c6c9b9f7ae9ee67f0083d4bce401c1eb14cd602b883e20
+FROM samanhappy/mcphub:1.2.2@sha256:a6fb457b1218948cc79c9865baa5fa0c7f689f5af50a2369eea249cf5dd508cf
 
 WORKDIR /opt/src
 
@@ -18,13 +18,20 @@ RUN set -x \
     && if [ "$ARCH" = "x86_64" ]; then ARCH_LABEL="amd64"; \
        elif [ "$ARCH" = "aarch64" ]; then ARCH_LABEL="arm64"; \
        else echo "Unsupported architecture: $ARCH" >&2; exit 1; fi \
-    && CADDY_VER=$(curl -fsSL "https://api.github.com/repos/caddyserver/caddy/releases/latest" \
-         | jq -r '.tag_name' | tr -d 'v') \
-    && curl -fsSL "https://github.com/caddyserver/caddy/releases/download/v${CADDY_VER}/caddy_${CADDY_VER}_linux_${ARCH_LABEL}.tar.gz" \
+    && CADDY_VER=$(curl -fsSL --connect-timeout 15 --max-time 60 \
+         "https://api.github.com/repos/caddyserver/caddy/releases/latest" \
+         | jq -er '.tag_name | ltrimstr("v")') \
+    && printf '%s\n' "$CADDY_VER" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' \
+    && curl -fsSL --connect-timeout 15 --max-time 120 "https://github.com/caddyserver/caddy/releases/download/v${CADDY_VER}/caddy_${CADDY_VER}_linux_${ARCH_LABEL}.tar.gz" \
          -o /tmp/caddy.tar.gz \
+    && curl -fsSL --connect-timeout 15 --max-time 60 "https://github.com/caddyserver/caddy/releases/download/v${CADDY_VER}/caddy_${CADDY_VER}_checksums.txt" \
+         -o /tmp/caddy-checksums.txt \
+    && CADDY_SHA512=$(awk -v archive="caddy_${CADDY_VER}_linux_${ARCH_LABEL}.tar.gz" \
+         '$2 == archive { hash = $1; count++ } END { if (count != 1 || length(hash) != 128 || hash !~ /^[0-9a-f]+$/) exit 1; print hash }' /tmp/caddy-checksums.txt) \
+    && printf '%s  %s\n' "$CADDY_SHA512" /tmp/caddy.tar.gz | sha512sum -c - \
     && tar -xzf /tmp/caddy.tar.gz -C /usr/local/bin caddy \
     && chmod 755 /usr/local/bin/caddy \
-    && rm -f /tmp/caddy.tar.gz \
+    && rm -f /tmp/caddy.tar.gz /tmp/caddy-checksums.txt \
     && apt-get purge -y jq \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/* \
@@ -43,7 +50,12 @@ RUN NPM_BEFORE="$(date -u -d '7 days ago' '+%Y-%m-%dT%H:%M:%SZ')" \
 COPY ./run.sh /opt/src/run.sh
 COPY ./manage.sh /opt/src/manage.sh
 COPY ./mcp-config.cjs /opt/src/mcp-config.cjs
+COPY ./policy/ /opt/src/policy/
 COPY ./LICENSE.md /opt/src/LICENSE.md
+RUN node /opt/src/policy/apply.mjs /app \
+    && cd /app \
+    && pnpm backend:build \
+    && node /opt/src/policy/apply.mjs /app --manifest > /opt/src/policy/integrity.json
 RUN chmod 755 /opt/src/run.sh /opt/src/manage.sh /opt/src/mcp-config.cjs \
     && ln -s /opt/src/manage.sh /usr/local/bin/mcp_manage
 

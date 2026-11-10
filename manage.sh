@@ -57,18 +57,16 @@ check_container() {
 }
 
 load_config() {
-  if [ -z "$MCP_PORT" ]; then
-    if [ -f "$PORT_FILE" ]; then
-      MCP_PORT=$(cat "$PORT_FILE")
-    else
-      MCP_PORT=3000
-    fi
+  # docker exec inherits the container's original environment, which can be
+  # older than the effective bind-mounted config used by the running service.
+  if [ -f "$PORT_FILE" ]; then
+    MCP_PORT=$(cat "$PORT_FILE")
+  elif [ -z "$MCP_PORT" ]; then
+    MCP_PORT=3000
   fi
 
-  if [ -z "$MCP_API_KEY" ]; then
-    if [ -f "$API_KEY_FILE" ]; then
-      MCP_API_KEY=$(cat "$API_KEY_FILE")
-    fi
+  if [ -f "$API_KEY_FILE" ]; then
+    MCP_API_KEY=$(cat "$API_KEY_FILE")
   fi
 
   if [ -f "$SERVERS_FILE" ]; then
@@ -77,12 +75,12 @@ load_config() {
     ENABLED_SERVERS="fetch"
   fi
 
-  # mcp_manage communicates with MCPHub directly on the internal port
+  # Health is internal; transport probes use the authenticated public proxy.
   MCPHUB_BASE="http://127.0.0.1:3001"
 }
 
 check_server() {
-  if ! curl -sf "${MCPHUB_BASE}/" >/dev/null 2>&1; then
+  if ! curl -sf --connect-timeout 2 --max-time 5 "${MCPHUB_BASE}/health" >/dev/null 2>&1; then
     exiterr "MCPHub is not responding. Is the container running?"
   fi
 }
@@ -103,6 +101,7 @@ parse_args() {
         shift
         ;;
       --test)
+        [ "$#" -ge 2 ] || show_usage "Missing server name. Usage: --test <server>"
         test_server=1
         server_arg="$2"
         shift; shift
@@ -191,20 +190,7 @@ do_test_server() {
     return 1
   fi
 
-  # Try to reach the server-specific MCP endpoint
-  local url="${MCPHUB_BASE}/mcp/${server_arg}"
-  local http_code
-  http_code=$(curl -sf -o /dev/null -w '%{http_code}' --max-time 10 "$url" 2>/dev/null)
-
-  if [ "$http_code" = "200" ] || [ "$http_code" = "405" ]; then
-    echo "Server '${server_arg}' is reachable (HTTP ${http_code})."
-  elif [ -n "$http_code" ] && [ "$http_code" != "000" ]; then
-    echo "Server '${server_arg}' responded with HTTP ${http_code}."
-    echo "It may still be starting up or may have a configuration issue."
-  else
-    echo "Server '${server_arg}' is not reachable."
-    echo "Check the container logs for errors."
-  fi
+  node /opt/src/policy/probe.mjs "$MCP_PORT" "$server_arg" "$API_KEY_FILE" || return 1
   echo
 }
 
@@ -216,7 +202,7 @@ do_status() {
 
   # Check MCPHub health
   local health_code
-  health_code=$(curl -sf -o /dev/null -w '%{http_code}' --max-time 5 "${MCPHUB_BASE}/" 2>/dev/null)
+  health_code=$(curl -sf -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 5 "${MCPHUB_BASE}/health" 2>/dev/null)
 
   if [ "$health_code" = "200" ]; then
     echo "MCPHub:  running (HTTP 200)"
@@ -237,6 +223,8 @@ do_status() {
   echo
   echo "Enabled MCP servers: ${ENABLED_SERVERS}"
   echo "Port: ${MCP_PORT}"
+  (cd /app && UPLINK_BOOT_FILE=/run/uplinkcrate/boot.json node /app/dist/uplinkPolicy.js status) \
+    || echo "Authentication: unavailable (check logs and configuration)"
   echo
 }
 
@@ -290,7 +278,7 @@ fi
 
 if [ "$test_server" = 1 ]; then
   do_test_server
-  exit 0
+  exit $?
 fi
 
 if [ "$show_status" = 1 ]; then

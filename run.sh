@@ -61,6 +61,9 @@ if [ ! -f "/.dockerenv" ] && [ ! -f "/run/.containerenv" ] \
 fi
 
 # Read and sanitize environment variables
+if [[ "$MCP_API_KEY" =~ [[:cntrl:]] ]]; then
+  exiterr "MCP_API_KEY must not contain control characters or multiple lines."
+fi
 MCP_API_KEY=$(nospaces "$MCP_API_KEY")
 MCP_API_KEY=$(noquotes "$MCP_API_KEY")
 MCP_PORT=$(nospaces "$MCP_PORT")
@@ -93,6 +96,7 @@ MCP_INTERNAL_PORT=3001
 if ! check_port "$MCP_PORT"; then
   exiterr "MCP_PORT must be an integer between 1 and 65535."
 fi
+MCP_PORT=$((10#$MCP_PORT))
 
 if [ "$MCP_PORT" = "$MCP_INTERNAL_PORT" ]; then
   exiterr "Port $MCP_INTERNAL_PORT is reserved for internal use. Please choose a different MCP_PORT."
@@ -117,6 +121,14 @@ MCPHUB_CONFIG="${DATA_DIR}/mcp_settings.json"
 MCPHUB_CONFIG_GENERATOR="/opt/src/mcp-config.cjs"
 USAGE_STATE_DIR="${DATA_DIR}/.mcp-usage"
 USAGE_BASE_URL=${MCP_USAGE_BASE_URL:-https://github.com/hwdsl2/ai-stack-extras/releases/download/v1.0.0}
+POLICY_CLI="/app/dist/uplinkPolicy.js"
+POLICY_INTEGRITY="/opt/src/policy/integrity.json"
+POLICY_RUNTIME="/run/uplinkcrate"
+if [ ! -f "$POLICY_CLI" ] || [ ! -f "$POLICY_INTEGRITY" ]; then
+  exiterr "This image is missing its authentication policy. Remove obsolete code mounts and use a complete image."
+fi
+mkdir -p "$POLICY_RUNTIME" || exiterr "Could not create protected runtime directory."
+chmod 700 "$POLICY_RUNTIME" || exiterr "Could not secure runtime directory."
 data_mounted=false
 data_existing=false
 
@@ -199,20 +211,24 @@ report_usage_counts() {
 # Generate or load API key
 if [ -n "$MCP_API_KEY" ]; then
   api_key="$MCP_API_KEY"
-  printf '%s' "$api_key" > "$API_KEY_FILE"
-  chmod 600 "$API_KEY_FILE"
 else
   if [ -f "$API_KEY_FILE" ]; then
-    api_key=$(cat "$API_KEY_FILE")
+    node "$POLICY_CLI" validate-key < "$API_KEY_FILE" \
+      || exiterr "The saved API key is invalid. Restore it before restarting; it was not changed."
+    # Preserve trailing newlines so malformed stored credentials are rejected,
+    # not silently trimmed into a different token.
+    api_key=$(cat "$API_KEY_FILE"; printf '.')
+    api_key=${api_key%.}
   else
     api_key="mcp-$(head -c 32 /dev/urandom | od -A n -t x1 | tr -d ' \n' | head -c 48)"
-    printf '%s' "$api_key" > "$API_KEY_FILE"
-    chmod 600 "$API_KEY_FILE"
   fi
 fi
 
-# Save port for use by mcp_manage
-printf '%s' "$MCP_PORT" > "$PORT_FILE"
+if ! printf '%s' "$api_key" | node "$POLICY_CLI" validate-key; then
+  exiterr "The API key must be a nonempty single HTTP bearer token. Existing key files were not changed."
+fi
+(umask 077; printf '%s' "$api_key" > "$POLICY_RUNTIME/bootstrap") \
+  || exiterr "Could not prepare protected bootstrap credential."
 
 # Determine server address for display
 if [ -n "$MCP_HOST" ]; then
@@ -298,21 +314,20 @@ else
   printf '%s' "fetch" > "/var/lib/mcp/.servers"
 fi
 
-if $first_run; then
-  touch "$INITIALIZED_MARKER"
-fi
-
 # Graceful shutdown handler
+# Invoked indirectly by the EXIT trap below.
+# shellcheck disable=SC2317,SC2329
 cleanup() {
-  echo
-  echo "Stopping UplinkCrate..."
+  local result=$?
+  trap - EXIT INT TERM
   kill "${CADDY_PID:-}" 2>/dev/null
   kill "${MCPHUB_PID:-}" 2>/dev/null
   wait "${CADDY_PID:-}" 2>/dev/null
   wait "${MCPHUB_PID:-}" 2>/dev/null
-  exit 0
+  return "$result"
 }
-trap cleanup INT TERM
+trap cleanup EXIT
+trap 'exit 0' INT TERM
 
 # Start MCPHub (always bound to localhost on internal port)
 export PORT="$MCP_INTERNAL_PORT"
@@ -324,19 +339,40 @@ export MCPHUB_SETTING_PATH="$MCPHUB_CONFIG"
 # MCPHub expects to run from /app
 cd /app || exiterr "MCPHub app directory /app not found."
 
+# Resolve .env and deployment mode exactly where MCPHub does. Fail before
+# replacing the persisted key or starting either service if policy is unsafe.
+policy_args=(prepare "$POLICY_RUNTIME/bootstrap" "$MCPHUB_CONFIG" "$POLICY_RUNTIME" "$POLICY_INTEGRITY")
+if [ -f "$API_KEY_FILE" ]; then
+  policy_args+=("$API_KEY_FILE")
+fi
+node "$POLICY_CLI" "${policy_args[@]}" \
+  || exiterr "Authentication policy preflight failed. Existing settings and keys were retained."
+export UPLINK_BOOT_FILE="$POLICY_RUNTIME/boot.json"
+key_tmp=$(mktemp "${API_KEY_FILE}.XXXXXX") || exiterr "Could not prepare persisted API key."
+if ! printf '%s' "$api_key" > "$key_tmp" || ! chmod 600 "$key_tmp" || ! mv -f "$key_tmp" "$API_KEY_FILE"; then
+  rm -f "$key_tmp"
+  exiterr "Could not persist the effective API key."
+fi
+printf '%s' "$MCP_PORT" > "$PORT_FILE" || exiterr "Could not save effective port."
+if $first_run; then
+  touch "$INITIALIZED_MARKER"
+fi
+# The policy reads its private immutable snapshot, not a secret from the env.
+unset MCP_API_KEY
+
 echo "Starting MCPHub server..."
 node dist/index.js &
 MCPHUB_PID=$!
 
-# Wait for MCPHub to become ready (up to 30 seconds)
+# Require the running patched process to confirm transport registration too.
 wait_for_mcphub() {
   local i=0
-  while [ "$i" -lt 30 ]; do
+  while [ "$i" -lt 120 ]; do
     if ! kill -0 "$MCPHUB_PID" 2>/dev/null; then
       return 1
     fi
-    if curl -sf "http://127.0.0.1:${MCP_INTERNAL_PORT}/health" >/dev/null 2>&1 \
-       || curl -sf "http://127.0.0.1:${MCP_INTERNAL_PORT}/" >/dev/null 2>&1; then
+    if curl -sf --connect-timeout 1 --max-time 2 "http://127.0.0.1:${MCP_INTERNAL_PORT}/health" >/dev/null 2>&1 \
+       && node "$POLICY_CLI" verify-ready "$MCPHUB_PID" >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
@@ -349,26 +385,21 @@ if ! wait_for_mcphub; then
   if ! kill -0 "$MCPHUB_PID" 2>/dev/null; then
     exiterr "MCPHub failed to start. Check the container logs for details."
   else
-    exiterr "MCPHub did not become ready after 30 seconds."
+    exiterr "MCPHub did not confirm its authentication policy and transport readiness within 120 checks."
   fi
 fi
 
 # Start Caddy auth proxy (always enabled)
-CADDY_CONFIG_FILE="${DATA_DIR}/.Caddyfile"
-cat > "$CADDY_CONFIG_FILE" << CADDYEOF
-:${MCP_PORT} {
-  @unauthed {
-    not header Authorization "Bearer ${api_key}"
-    not path /health
-  }
-  respond @unauthed "Unauthorized" 401
-  reverse_proxy 127.0.0.1:${MCP_INTERNAL_PORT} {
-    header_up -X-Forwarded-For
-  }
-}
-CADDYEOF
-caddy fmt --overwrite "$CADDY_CONFIG_FILE" 2>/dev/null || true
-caddy run --config "$CADDY_CONFIG_FILE" --adapter caddyfile &
+CADDY_CONFIG_FILE="${DATA_DIR}/.Caddy.json"
+caddy_tmp=$(mktemp "${CADDY_CONFIG_FILE}.XXXXXX") || exiterr "Could not prepare auth proxy config."
+if ! node "$POLICY_CLI" proxy "$MCP_PORT" "$MCP_INTERNAL_PORT" > "$caddy_tmp" \
+   || ! chmod 600 "$caddy_tmp" \
+   || ! caddy validate --config "$caddy_tmp" >/dev/null \
+   || ! mv -f "$caddy_tmp" "$CADDY_CONFIG_FILE"; then
+  rm -f "$caddy_tmp"
+  exiterr "Could not validate and install auth proxy config."
+fi
+caddy run --config "$CADDY_CONFIG_FILE" &
 CADDY_PID=$!
 # Wait up to 5 seconds for Caddy to start
 _i=0
@@ -383,12 +414,24 @@ done
 if ! kill -0 "$CADDY_PID" 2>/dev/null; then
   exiterr "Caddy auth proxy failed to start."
 fi
+curl -sf --connect-timeout 1 --max-time 2 "http://127.0.0.1:${MCP_PORT}/health" >/dev/null \
+  || exiterr "Caddy auth proxy did not become ready."
 report_usage_counts
 
 # Copy API key to shared volume if mounted (used by self-hosted-ai-stack)
 if grep -q " /var/lib/mcp-shared " /proc/mounts 2>/dev/null; then
-  cp "$API_KEY_FILE" /var/lib/mcp-shared/.api_key
-  chmod 644 /var/lib/mcp-shared/.api_key
+  shared_tmp=$(mktemp /var/lib/mcp-shared/.api_key.XXXXXX) || exiterr "Could not prepare shared API key."
+  if ! cp "$API_KEY_FILE" "$shared_tmp" || ! chmod 644 "$shared_tmp" \
+     || ! mv -f "$shared_tmp" /var/lib/mcp-shared/.api_key; then
+    rm -f "$shared_tmp"
+    exiterr "Could not publish shared API key."
+  fi
+fi
+
+# Discard only the old generated config after successful initialization.
+# A mounted file or unexpected directory must not prevent a working startup.
+if ! rm -f -- "${DATA_DIR}/.Caddyfile" 2>/dev/null; then
+  echo "Warning: Could not remove obsolete proxy configuration." >&2
 fi
 
 # Display connection info
@@ -426,5 +469,9 @@ echo
 echo "Setup complete."
 echo
 
-# Wait for main process
-wait "$MCPHUB_PID"
+# Bash 5.1+ supports waiting for either of these explicit child PIDs.
+# Either service exiting must stop the other, so restart policies can recover.
+wait -n "$MCPHUB_PID" "$CADDY_PID"
+child_status=$?
+[ "$child_status" -ne 0 ] || child_status=1
+exit "$child_status"
