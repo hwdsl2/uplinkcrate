@@ -204,6 +204,30 @@ docker run \
     -d hwdsl2/mcp-gateway
 ```
 
+## Secret files
+
+Supported optional inputs: `MCP_API_KEY_FILE`, `MCP_ADMIN_PASSWORD_FILE`, `MCP_GITHUB_TOKEN_FILE`, `MCP_BRAVE_API_KEY_FILE`, `MCP_POSTGRES_URL_FILE`. Each replaces its matching direct variable. Leave the matching direct variable **unset**; do not assign even an empty value in container configuration or the mounted env file. The mounted env file keeps its existing precedence. Setting both sources, an empty file path or an invalid file stops startup before credential/configuration writes.
+
+**Note:** If the matching direct variable is inherited from `-e` or Compose `environment`, remove its assignment and recreate the container. Alternatively, remove any direct assignment from the bind-mounted `mcp.env`, add the matching `unset` command (for example, `unset MCP_API_KEY`) before the `_FILE` assignment, and restart once the updated file is visible. This command works in the shell-sourced bind-mounted file; Docker `--env-file` and Compose `env_file` do not execute shell commands. The workaround leaves the old credential in the container configuration until recreation.
+
+Use a readable, nonempty regular file (a symlink to one is accepted). Paths may contain spaces. Only terminal LF/CRLF sequences are removed; embedded line breaks, lone CR, NUL and other controls are rejected. Bearer tokens may contain ASCII letters, digits and `-._~+/`, with optional trailing `=` padding. Password/URL inputs retain spaces, quotes and punctuation. External permissions and ownership are unchanged.
+
+See the [opt-in Compose-secret override](docs/examples/compose.secrets.yml). For a local CPU candidate, build the current checkout, then merge the override with your existing configuration:
+
+```bash
+docker build -t uplinkcrate:secret-files-candidate .
+SECRET_FILE_IMAGE=uplinkcrate:secret-files-candidate SECRET_FILE_PATH=/absolute/path/to/api-key \
+  docker compose -f docker-compose.yml -f docs/examples/compose.secrets.yml config
+```
+
+Review the merged configuration before starting only the affected service with the same project, volumes and file arguments. Remove its direct-key assignment first. Older published images may ignore these inputs; select an image containing this implementation. Compose and Podman mounting checks are provided for candidate validation; this source change alone does not establish Podman Compose, Swarm, Kubernetes or GPU validation.
+
+Rotation is startup-based. After making new contents visible, restart the affected container and refresh credential consumers. Changing the container's environment configuration or mounts requires recreation. Atomic replacement of a bind-mounted host file can leave the old inode mounted; verify visibility and recreate the affected container if needed. Keep persistent volumes and backups. Before downgrading, configure a direct/saved credential supported by the older image and verify protected requests with correct, wrong and missing credentials.
+
+Primary keys still reach existing persisted/shared key files and generated configuration. Back up and restrict those copies. File input does not provide encryption or remove secrets from process environments, arguments or upstream state.
+
+The admin password remains a first-run input; changing its file does not reset an existing account. GitHub/Brave/PostgreSQL file inputs feed initial MCP settings. Existing administrator-maintained `mcp_settings.json` is preserved; update those server credentials through the dashboard/settings procedure instead of deleting users or regenerating settings. The strict saved `.api_key` reader still rejects trailing newlines; terminal-newline acceptance applies only to new external inputs.
+
 ## Managing MCP servers
 
 Use `docker exec` to manage the gateway with the `mcp_manage` helper script.

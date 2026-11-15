@@ -204,6 +204,24 @@ docker run \
     -d hwdsl2/mcp-gateway
 ```
 
+<a id="secret-files"></a>
+
+## 金鑰檔案
+
+可選輸入：`MCP_API_KEY_FILE`, `MCP_ADMIN_PASSWORD_FILE`, `MCP_GITHUB_TOKEN_FILE`, `MCP_BRAVE_API_KEY_FILE`, `MCP_POSTGRES_URL_FILE`。每個輸入取代對應的直接變數。不要在容器設定或掛載 env 檔案中設定對應直接變數，即使是空值也不行。掛載 env 檔案保持原有優先順序。同時設定兩種來源、空路徑或無效檔案會在寫入憑證或設定之前終止啟動。
+
+注：若對應直接變數來自 `-e` 或 Compose `environment`，請移除該賦值並重建容器。另一種做法是刪除繫結掛載的 `mcp.env` 中的直接賦值，在對應 `_FILE` 變數的賦值前加入相應的 `unset` 命令（例如 `unset MCP_API_KEY`），確認容器能看到更新後的檔案再重新啟動。此命令適用於由 shell 讀取執行的繫結掛載檔案；Docker `--env-file` 和 Compose `env_file` 不會執行 shell 命令。容器設定中的舊憑證仍會保留，直到重建容器。
+
+檔案必須可讀、非空且為一般檔案；允許指向一般檔案的符號連結，路徑可含空格。僅移除結尾的 LF/CRLF 序列；拒絕內部換行、單獨 CR、NUL 及其他控制字元。Bearer 權杖僅允許 ASCII 字母、數字及 `-._~+/`，結尾可帶 `=` 填補字元。密碼和 URL 保留空格、引號及標點。不會變更來源檔案權限或擁有者。
+
+使用[可選 Compose secret 覆寫檔案](examples/compose.secrets.yml)，明確設定 `SECRET_FILE_IMAGE` 為相容映像檔、`SECRET_FILE_PATH` 為主機金鑰路徑，並移除直接金鑰賦值。先合併現有 Compose 檔案執行 `config`，檢查後僅重建受影響的服務，保留專案名稱和資料卷。舊映像檔可能忽略新輸入；本機 CPU 建置方法見[英文說明](../README.md#secret-files)。掛載檢查腳本不代表已驗證 Podman Compose、Swarm、Kubernetes 或 GPU。
+
+輪換在啟動時生效。確認容器能看到新內容後重新啟動，並更新相關用戶端使用的憑證；容器環境設定或掛載變更需要重建容器。原子替換主機繫結檔案可能保留舊 inode，此時需重建受影響的容器。降級前先設定舊映像檔支援的直接或已儲存憑證，並驗證正確、錯誤和缺少憑證的受保護請求。保留資料卷和備份。
+
+主金鑰仍會寫入現有的持久化或共用金鑰檔案及產生的設定。請限制存取並備份這些副本。檔案輸入不提供加密，也不保證金鑰不會出現在程序環境、參數或上游狀態中。
+
+管理員密碼仍只用於首次初始化，修改檔案不會重設現有帳號。GitHub、Brave 和 PostgreSQL 輸入用於初始 MCP 設定。既有 `mcp_settings.json` 會保留；請透過面板或設定流程更新對應伺服器憑證，不要刪除使用者或重新產生設定。既有 `.api_key` 仍嚴格拒絕結尾換行；新檔案輸入的換行規則不適用於它。
+
 ## 管理 MCP 伺服器
 
 使用 `docker exec` 透過 `mcp_manage` 輔助腳本管理閘道。

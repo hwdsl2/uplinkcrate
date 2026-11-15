@@ -2,6 +2,17 @@
 
 Notable changes to UplinkCrate are documented here.
 
+## 2026-11-15
+
+### Added
+
+- Accept mounted secret files through `MCP_API_KEY_FILE`, `MCP_ADMIN_PASSWORD_FILE`, `MCP_GITHUB_TOKEN_FILE`, `MCP_BRAVE_API_KEY_FILE`, `MCP_POSTGRES_URL_FILE` with explicit source-conflict and file validation.
+
+### Compatibility
+
+- Rotation applies at startup. Existing direct/generated credentials and volumes remain supported; older images require an older supported credential source.
+- Existing persisted/shared credentials and upstream settings remain in use; file inputs do not automatically rotate saved secondary credentials.
+
 ## 2026-11-09
 
 Release: `2026.11.1`
