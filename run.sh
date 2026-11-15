@@ -60,12 +60,62 @@ if [ ! -f "/.dockerenv" ] && [ ! -f "/run/.containerenv" ] \
   exiterr "This script ONLY runs in a container (e.g. Docker, Podman)."
 fi
 
+# Resolve explicit external inputs before normalization or persistent writes.
+# Begin secret-file helpers
+# Optional external inputs only. Legacy saved-key readers remain in the caller.
+
+secret_error() { printf 'Error: %s\n' "$1" >&2; exit 1; }
+
+secret_resolve() {
+  local name="$1" kind="$2" file_name="${1}_FILE" path value LC_ALL=C header_pattern='^[ -~]+$'
+  printf -v "${name}_FROM_FILE" '%s' ''
+  [[ ${!file_name+x} ]] || return 0
+  [[ ! ${!name+x} ]] || secret_error "$file_name conflicts with $name (even when empty)."
+  path=${!file_name}
+  [[ -n "$path" ]] || secret_error "$file_name must name a nonempty file path."
+  [[ -f "$path" && -r "$path" && -s "$path" ]] \
+    || secret_error "$file_name must name a readable, nonempty regular file."
+  # read retains terminal newlines; a successful NUL-delimited read detects NUL
+  # before Bash can silently discard it. Never source or evaluate secret bytes.
+  if IFS= read -r -d '' value < "$path"; then
+    secret_error "$file_name contains a NUL byte."
+  fi
+  while [[ "$value" == *$'\n' ]]; do
+    value=${value%$'\n'}
+    value=${value%$'\r'}
+  done
+  [[ -n "$value" && "$value" != *[[:cntrl:]]* ]] \
+    || secret_error "$file_name must contain one nonempty line without control characters."
+  # Bearer transports use RFC 6750 b64token; passwords and URLs are text.
+  if [[ "$kind" == bearer && ! "$value" =~ ^[A-Za-z0-9._~+/-]+=*$ ]]; then
+    secret_error "$file_name must contain a single HTTP bearer token."
+  fi
+  if [[ "$kind" == header && ( ! "$value" =~ $header_pattern || "$value" == ' '* || "$value" == *' ' ) ]]; then
+    secret_error "$file_name must contain ASCII header data without leading or trailing spaces."
+  fi
+  printf -v "$name" '%s' "$value"
+  printf -v "${name}_FROM_FILE" '%s' 1
+  export "${name?}"
+}
+# End secret-file helpers
+
+secret_resolve MCP_API_KEY bearer
+secret_resolve MCP_ADMIN_PASSWORD text
+secret_resolve MCP_GITHUB_TOKEN bearer
+secret_resolve MCP_BRAVE_API_KEY bearer
+secret_resolve MCP_POSTGRES_URL text
+if [ "${MCP_API_KEY_FROM_FILE:-}" = 1 ] && [ "${#MCP_API_KEY}" -gt 8192 ]; then
+  exiterr "MCP_API_KEY_FILE exceeds the supported token length."
+fi
+
 # Read and sanitize environment variables
 if [[ "$MCP_API_KEY" =~ [[:cntrl:]] ]]; then
   exiterr "MCP_API_KEY must not contain control characters or multiple lines."
 fi
-MCP_API_KEY=$(nospaces "$MCP_API_KEY")
-MCP_API_KEY=$(noquotes "$MCP_API_KEY")
+if [ "${MCP_API_KEY_FROM_FILE:-}" != 1 ]; then
+  MCP_API_KEY=$(nospaces "$MCP_API_KEY")
+  MCP_API_KEY=$(noquotes "$MCP_API_KEY")
+fi
 MCP_PORT=$(nospaces "$MCP_PORT")
 MCP_PORT=$(noquotes "$MCP_PORT")
 MCP_HOST=$(nospaces "$MCP_HOST")
@@ -75,16 +125,24 @@ MCP_SERVERS=$(noquotes "$MCP_SERVERS")
 
 MCP_FILESYSTEM_DIRS=$(nospaces "$MCP_FILESYSTEM_DIRS")
 MCP_FILESYSTEM_DIRS=$(noquotes "$MCP_FILESYSTEM_DIRS")
-MCP_GITHUB_TOKEN=$(nospaces "$MCP_GITHUB_TOKEN")
-MCP_GITHUB_TOKEN=$(noquotes "$MCP_GITHUB_TOKEN")
-MCP_BRAVE_API_KEY=$(nospaces "$MCP_BRAVE_API_KEY")
-MCP_BRAVE_API_KEY=$(noquotes "$MCP_BRAVE_API_KEY")
-MCP_POSTGRES_URL=$(nospaces "$MCP_POSTGRES_URL")
-MCP_POSTGRES_URL=$(noquotes "$MCP_POSTGRES_URL")
+if [ "${MCP_GITHUB_TOKEN_FROM_FILE:-}" != 1 ]; then
+  MCP_GITHUB_TOKEN=$(nospaces "$MCP_GITHUB_TOKEN")
+  MCP_GITHUB_TOKEN=$(noquotes "$MCP_GITHUB_TOKEN")
+fi
+if [ "${MCP_BRAVE_API_KEY_FROM_FILE:-}" != 1 ]; then
+  MCP_BRAVE_API_KEY=$(nospaces "$MCP_BRAVE_API_KEY")
+  MCP_BRAVE_API_KEY=$(noquotes "$MCP_BRAVE_API_KEY")
+fi
+if [ "${MCP_POSTGRES_URL_FROM_FILE:-}" != 1 ]; then
+  MCP_POSTGRES_URL=$(nospaces "$MCP_POSTGRES_URL")
+  MCP_POSTGRES_URL=$(noquotes "$MCP_POSTGRES_URL")
+fi
 MCP_GIT_REPO=$(nospaces "$MCP_GIT_REPO")
 MCP_GIT_REPO=$(noquotes "$MCP_GIT_REPO")
-MCP_ADMIN_PASSWORD=$(nospaces "$MCP_ADMIN_PASSWORD")
-MCP_ADMIN_PASSWORD=$(noquotes "$MCP_ADMIN_PASSWORD")
+if [ "${MCP_ADMIN_PASSWORD_FROM_FILE:-}" != 1 ]; then
+  MCP_ADMIN_PASSWORD=$(nospaces "$MCP_ADMIN_PASSWORD")
+  MCP_ADMIN_PASSWORD=$(noquotes "$MCP_ADMIN_PASSWORD")
+fi
 
 # Apply defaults
 [ -z "$MCP_PORT" ] && MCP_PORT=3000
