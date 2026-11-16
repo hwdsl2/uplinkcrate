@@ -1,11 +1,11 @@
 name: build
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
       - '.github/workflows/main.yml'
-      - '.github/workflows/tests/check_secret_mounts.py'
       - '.github/workflows/buildx.yml'
       - '.dockerignore'
       - 'Dockerfile'
@@ -27,6 +27,7 @@ jobs:
     uses: ./.github/workflows/mcp_gateway_test.yml
 
   buildx:
+    if: github.ref == 'refs/heads/main'
     needs: [shellcheck, mcp_gateway_test]
     uses: ./.github/workflows/buildx.yml
     secrets:
